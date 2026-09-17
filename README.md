@@ -12,6 +12,8 @@ services. The goal is to own it completely: root it for good, strip the bloat, f
 what MLS left broken, and replace the frozen stock kernel with a maintained,
 hardened build. All of it cable-free, and above all **without ever bricking it**.
 
+📝 **Full writeup:** [My mini kitchen TV runs Docker now](https://medium.com/@mloukeris/my-mini-kitchen-tv-runs-docker-now-5dffad481fa7), on Medium.
+
 ## Table of contents
 
 - [Device](#device)
