@@ -1,0 +1,46 @@
+# MAIC USB OTG host class drivers -- CANONICAL fragment (supersedes patches/usb/config.fragment).
+# Append to kernel-project/config/maic_defconfig (and mirror into /src/linux/arch/arm64/configs/maic_defconfig
+# and the build's .config -- the same three places as the SW_WITCH_MODE fix).
+# Built-in only: CONFIG_MODULES is off. Verified by a clean GCC 4.9 build in docker volume maic-wt-usb
+# (2026-09-15): every option resolved =y, every driver object built, every driver struct present in System.map.
+# Do NOT add CONFIG_USB_OTG or CONFIG_USB_OTG_WHITELIST: they restrict which devices enumerate.
+# CONFIG_MTK_MUSB_SW_WITCH_MODE must stay unset (stock parity: host + VBUS at boot).
+
+# --- Ethernet dongles and tethering ---
+CONFIG_USB_RTL8152=y            # RTL8152/8153: most USB-C/USB-A Gigabit dongles
+CONFIG_USB_NET_CDCETHER=y       # CDC-ECM (already =y in parity; listed for completeness)
+CONFIG_USB_NET_CDC_EEM=y        # CDC-EEM adapters
+CONFIG_USB_NET_SMSC95XX=y       # SMSC LAN95xx (dongles, some hubs)
+CONFIG_USB_NET_DM9601=y         # Davicom DM9601 (cheap USB 1.1 dongles)
+CONFIG_USB_NET_RNDIS_HOST=y     # Android phone USB tethering (iface usb%d)
+CONFIG_USB_IPHETH=y             # iPhone Personal Hotspot over USB
+
+# --- Mobile broadband modems (CONFIG_USB_WDM is selected automatically) ---
+CONFIG_USB_NET_CDC_MBIM=y
+CONFIG_USB_NET_QMI_WWAN=y
+
+# --- Storage ---
+CONFIG_USB_UAS=y                # USB Attached SCSI enclosures (falls back to usb-storage/BOT)
+
+# --- Serial ---
+CONFIG_USB_ACM=y                # CDC-ACM: Arduino, ESP32-S2/S3 native USB, modems
+CONFIG_USB_SERIAL=y             # (already =y in parity)
+CONFIG_USB_SERIAL_GENERIC=y
+CONFIG_USB_SERIAL_FTDI_SIO=y    # FTDI
+CONFIG_USB_SERIAL_CP210X=y      # Silicon Labs CP210x
+CONFIG_USB_SERIAL_CH341=y       # WCH CH340/CH341
+CONFIG_USB_SERIAL_PL2303=y      # Prolific PL2303
+
+# --- Input ---
+CONFIG_HID_MULTITOUCH=y         # USB touch panels / touchpads
+CONFIG_INPUT_JOYSTICK=y
+CONFIG_JOYSTICK_XPAD=y          # Xbox (and clone) pads
+CONFIG_HID_SONY=y               # DualShock 3/4 (NEW_LEDS/LEDS_CLASS already =y)
+
+# --- Diagnostics ---
+CONFIG_USB_ANNOUNCE_NEW_DEVICES=y   # dmesg logs VID/PID/product/manufacturer on every plug
+
+# --- Explicitly off ---
+# CONFIG_USB_OTG is not set
+# CONFIG_USB_OTG_WHITELIST is not set
+# CONFIG_MTK_MUSB_SW_WITCH_MODE is not set

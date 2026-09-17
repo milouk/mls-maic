@@ -1,0 +1,53 @@
+# --- Docker / containers (kernel-project/patches/docker, source docs/research/docker.md) ---
+# All built-in: CONFIG_MODULES is off on this kernel.
+#
+# Namespaces (USER_NS deliberately off: widens attack surface on 4.4.22, only needed
+# for userns-remap/rootless).
+CONFIG_NAMESPACES=y
+CONFIG_UTS_NS=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_NET_NS=y
+# CONFIG_USER_NS is not set
+#
+# IPC: runc's default spec mounts mqueue on /dev/mqueue (container start fails without
+# it); SysV shm is used by postgres & co. Bionic never uses SysV, no Android impact.
+CONFIG_POSIX_MQUEUE=y
+CONFIG_SYSVIPC=y
+#
+# cgroup v1 controllers
+CONFIG_CGROUP_DEVICE=y
+CONFIG_CGROUP_FREEZER=y
+CONFIG_CGROUP_PIDS=y
+# CPUSETS activates Android init.rc's placeholder "cpus 0" groups -> needs
+# magisk/post-fs-data.d/10-maic-cpuset.sh on first boot (see README).
+CONFIG_CPUSETS=y
+CONFIG_MEMCG=y
+CONFIG_MEMCG_SWAP=y
+# swap accounting only when booted with swapaccount=1 (no cmdline budget spent now)
+# CONFIG_MEMCG_SWAP_ENABLED is not set
+CONFIG_MEMCG_KMEM=y
+CONFIG_CFS_BANDWIDTH=y
+#
+# pre-4.7: runc mounts /dev/pts with newinstance
+CONFIG_DEVPTS_MULTIPLE_INSTANCES=y
+#
+# Storage: overlay2 driver, ACL/xattr expected by many images
+CONFIG_OVERLAY_FS=y
+CONFIG_EXT4_FS_POSIX_ACL=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_TMPFS_XATTR=y
+#
+# Networking (Phase 2 bridge networking; harmless in Phase 1 host networking).
+# VETH requires the xt_qtaguid patch in docker.patch.
+CONFIG_VETH=y
+CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
+CONFIG_NETFILTER_XT_MATCH_COMMENT=y
+CONFIG_NF_NAT_IPV6=y
+CONFIG_IP6_NF_NAT=y
+CONFIG_IP6_NF_TARGET_MASQUERADE=y
+#
+# Kept on on purpose (Android INTERNET-permission model); container non-root users
+# need GID 3003 (aid_inet). See README.
+CONFIG_ANDROID_PARANOID_NETWORK=y

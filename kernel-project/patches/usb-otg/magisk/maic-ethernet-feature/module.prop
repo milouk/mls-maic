@@ -1,0 +1,6 @@
+id=maic-ethernet-feature
+name=MAIC Ethernet feature flag
+version=1.0
+versionCode=1
+author=milouk
+description=Declares android.hardware.ethernet so apps that check FEATURE_ETHERNET see wired Ethernet. Optional: EthernetService already runs on this device.

@@ -1,0 +1,342 @@
+# Complete set of MAIC modifications to the kernel tree.
+# Regenerated from the live build tree. Apply with: patch -p1 < this-file
+#
+# FIXES (keep these):
+#   camera_hw/Makefile          - drop DEMO_BOARD_SUPPORT=1 so camera reset is asserted
+#   mtk_gslX680.c               - tolerate the expected 0xE0 NAK; falling-edge IRQ
+#   mt8167_evb.c                - bind the ad82584f amp to the card
+#   stk8baxx-new/Makefile       - gate behind its Kconfig symbol
+#   gpu_rgx/Makefile            - select the DDK matching the device userspace
+#   battery_meter.c             - demote the batt table dump so early boot survives
+#
+# DIAGNOSTIC (remove for a production build):
+#   mtk-smi.c, mtk-scpsys-mt8167.c  - smi_keep_disp + power-domain logging
+#   mtkfb.c, ddp_dpi.c              - MAIC set_par/pan/dpi_* markers
+#   videox/debug.c, ddp_debug.c     - g_mobilelog / dbg_log_level
+#   mtk_gslX680.c GSL_DEBUG=1       - driver debug logging
+
+### drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+--- a/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
++++ b/drivers/input/touchscreen/mediatek/gslX680/mtk_gslX680.c
+@@ -163,13 +163,13 @@
+ static void msg_dma_release(void);
+ #endif
+ 
+-#define GSL_DEBUG (0)
++#define GSL_DEBUG (1) /* MAIC diag */
+ #if GSL_DEBUG
+ #define GSL_LOGD(fmt, args...)		\
+-		pr_debug(GSLX680_NAME	"<-dbg-> [%04d] [@%s]" fmt, \
++		pr_info(GSLX680_NAME	"<-dbg-> [%04d] [@%s]" fmt, \
+ 		__LINE__, __func__, ##args)
+ #define GSL_LOGF() \
+-		pr_debug(GSLX680_NAME	"<-func-> [%04d] [@%s] is call!\n", \
++		pr_info(GSLX680_NAME	"<-func-> [%04d] [@%s] is call!\n", \
+ 		__LINE__, __func__)
+ 
+ #else
+@@ -593,7 +593,15 @@
+ 	int ret = 0;
+ 
+ 	write_buf[0] = 0x88;
+-	ret = gsl_i2c_write_bytes(client, 0xe0, &write_buf[0], 1);
++	/* MAIC: deliberately NOT accumulated into ret. Register 0xE0 = 0x88 halts the GSL's
++	 * internal DSP, and the chip NAKs this write as it stops its own I2C block -- the
++	 * -ENXIO is EXPECTED, not a failure. Our rev assigns it to ret, so reset_chip()
++	 * returned negative, init_chip() aborted, and tpd_registration() bailed with
++	 * 'Failed to init chip!' -- meaning request_irq() and the touch event thread never
++	 * ran at all. Stock's gslx68x fires the same write and ignores the result (its
++	 * binary contains none of these error strings). 0xE4 and 0xBC are still checked.
++	 */
++	gsl_i2c_write_bytes(client, 0xe0, &write_buf[0], 1);
+ 	msleep(20);
+ 
+ 	write_buf[0] = 0x04;
+@@ -1504,7 +1512,7 @@
+ 		GSL_LOGD("touch_irq = %d\n ", touch_irq);
+ 		ret = request_irq(touch_irq,
+ 			(irq_handler_t) tpd_eint_interrupt_handler,
+-			IRQF_TRIGGER_RISING, TPD_DEVICE, NULL);
++			IRQF_TRIGGER_FALLING /* MAIC: was RISING; stock passes FALLING and the DTB declares falling (interrupts = <0x64 0x2>). request_irq()'s flag overrides the DT type. */, TPD_DEVICE, NULL);
+ 		if (ret > 0) {
+ 			ret = -1;
+ 			GSL_LOGE(" gslX680 -- error : tpd request_irq IRQ LINE NOT AVAILABLE!.\n");
+### drivers/memory/mtk-smi.c
+--- a/drivers/memory/mtk-smi.c
++++ b/drivers/memory/mtk-smi.c
+@@ -484,6 +484,28 @@
+ 	return 0;
+ }
+ 
++/*
++ * MAIC diag: cmdline-gated escape for the DISP power-domain teardown.
++ *
++ * mtk_smi_init_late() drops the last reference on the DISP power domain at late_initcall,
++ * which runs scpsys_power_off(): bus protection, SRAM power-down,
++ * clk_disable_unprepare(smi_mm), ISO assert, RST_B hardware reset, PWR_ON cleared. On a
++ * normal Android boot SurfaceFlinger immediately re-opens fb0 and the path is powered back
++ * up, so nobody notices. Booting the recovery slot, nothing ever performs that repair, so a
++ * display inherited from LK dies here -- which is the leading explanation for our green
++ * screen. There is no generic cmdline escape for this path (pd_ignore_unused only guards
++ * genpd_poweroff_unused, not an explicit put_sync), hence this flag.
++ *
++ * Default is OFF, i.e. behaviour identical to stock. Pass "smi_keep_disp" to skip the put.
++ */
++static bool smi_keep_disp __initdata;
++static int __init smi_keep_disp_setup(char *__unused)
++{
++	smi_keep_disp = true;
++	return 1;
++}
++__setup("smi_keep_disp", smi_keep_disp_setup);
++
+ /* put the disp power domain that we got in smi probe */
+ static int __init mtk_smi_init_late(void)
+ {
+@@ -502,7 +524,12 @@
+ 	 * for the disp power domain.
+ 	 */
+ 	dev = common->dev;
+-	pm_runtime_put_sync(dev);
++	if (smi_keep_disp) {
++		pr_err("MAIC smi: keeping DISP power domain (smi_keep_disp)\n");
++	} else {
++		pr_err("MAIC smi: dropping DISP power domain ref now\n");
++		pm_runtime_put_sync(dev);
++	}
+ 
+ 	return smi_dev_register();
+ }
+### drivers/misc/mediatek/accelerometer/stk8baxx-new/Makefile
+--- a/drivers/misc/mediatek/accelerometer/stk8baxx-new/Makefile
++++ b/drivers/misc/mediatek/accelerometer/stk8baxx-new/Makefile
+@@ -3,4 +3,7 @@
+ # Mirrors mc3433/Makefile and lis3dh/Makefile instead.
+ ccflags-y += -I$(srctree)/drivers/misc/mediatek/accelerometer/inc
+ ccflags-y += -I$(srctree)/drivers/misc/mediatek/hwmon/include
+-obj-y	:=  stk8baxx.o
++# MAIC: was unconditional obj-y, so this built whenever anything descended into this
++# directory, regardless of the Kconfig symbol. The driver calls sys_fchmodat() to make
++# its raw-I2C send/recv sysfs nodes world-writable, so it must not build unasked.
++obj-$(CONFIG_MTK_STK8BAXX_NEW)	+= stk8baxx.o
+### drivers/misc/mediatek/gpu/gpu_rgx/Makefile
+--- a/drivers/misc/mediatek/gpu/gpu_rgx/Makefile
++++ b/drivers/misc/mediatek/gpu/gpu_rgx/Makefile
+@@ -15,7 +15,7 @@
+ $(info *MTK_GPU_VERSION 2 = $(word 2,$(MTK_GPU_VERSION)))
+ 
+ ifeq ($(word 2,$(MTK_GPU_VERSION)),austin)
+-	obj-y += m1.8ED4333936/
++	obj-y += m1.8ED4490469/
+ else
+-	obj-y += m1.8ED4333936/
++	obj-y += m1.8ED4490469/
+ endif
+### drivers/misc/mediatek/imgsensor/src/mt8167/camera_hw/Makefile
+--- a/drivers/misc/mediatek/imgsensor/src/mt8167/camera_hw/Makefile
++++ b/drivers/misc/mediatek/imgsensor/src/mt8167/camera_hw/Makefile
+@@ -38,6 +38,12 @@
+ obj-y				+= camera_project/$(ARCH_MTK_PROJECT)/
+ endif
+ 
+-ifneq (,$(findstring tb8167p,$(ARCH_MTK_PROJECT)))
+-ccflags-y += -DDEMO_BOARD_SUPPORT=1
+-endif
++# MAIC: removed -DDEMO_BOARD_SUPPORT=1. It matched CONFIG_ARCH_MTK_PROJECT="tb8167p3_64"
++# and selected kd_camera_hw.c's legacy-GPIO branch, whose mtkcam_gpio_init() is EMPTY (8
++# bytes in System.map) and whose mtkcam_gpio_set() drives cam0_rst/cam0_pdn via gpio numbers
++# the DT does not provide (both resolve to -2, so gpio_direction_output returns -EINVAL and
++# reset is never asserted -- no sensor ever leaves reset).
++# Stock builds the DEMO_BOARD_SUPPORT==0 branch, which uses the eleven pinctrl states the DT
++# actually defines (cam0_rst0/1, cam0_pnd0/1, cam1_*, cam_ldo0_*).
++# NOTE: ccflags-y is per-Makefile and NOT inherited, so kd_sensorlist.c keeps
++# DEMO_BOARD_SUPPORT=1 from src/mt8167/Makefile -- which matches stock. Do not change that.
+### drivers/misc/mediatek/video/mt8167/dispsys/ddp_debug.c
+### drivers/misc/mediatek/video/mt8167/dispsys/ddp_dpi.c
+--- a/drivers/misc/mediatek/video/mt8167/dispsys/ddp_dpi.c
++++ b/drivers/misc/mediatek/video/mt8167/dispsys/ddp_dpi.c
+@@ -569,6 +569,7 @@
+ {
+ 	if (s_isDpiStart == false) {
+ 		DDPDBG("DISP/DPI,ddp_dpi_start\n");
++		pr_err("MAIC dpi_trigger: enabling DPI module=%d\n", module);
+ 		ddp_dpi_reset(module, cmdq);
+ 		/*enable DPI */
+ 		DPI_OUTREG32(cmdq, &DPI_REG[DPI_IDX(module)]->DPI_EN, 0x00000001);
+@@ -581,6 +582,8 @@
+ int ddp_dpi_stop(enum DISP_MODULE_ENUM module, void *cmdq_handle)
+ {
+ 	DDPDBG("DISP/DPI,ddp_dpi_stop\n");
++	/* MAIC diag: DDPDBG is pr_debug (compiled out), so use pr_err to reach last_kmsg */
++	pr_err("MAIC dpi_stop: module=%d  <-- DPI OUTPUT DISABLED\n", module);
+ 
+ 	/*disable DPI and background, and reset DPI */
+ 	DPI_OUTREG32(cmdq_handle, &DPI_REG[DPI_IDX(module)]->DPI_EN, 0x00000000);
+@@ -909,6 +912,18 @@
+ 
+ 		DDPDBG("DISP/DPI,ddp_dpi_config DPI status:%x, cmdq:%p\n",
+ 			INREG32(&DPI_REG[DPI_IDX(module)]->STATUS), cmdq_handle);
++		pr_err("MAIC dpi_config: mod=%d %ux%u bg=%ux%u clk_pol=%d de_pol=%d "
++		       "vsync(%d,%u,%u,%u) hsync(%d,%u,%u,%u) fmt=%d rgb_order=%d "
++		       "i2x=%d/%d lvds=%d\n",
++		       module, dpi_config->width, dpi_config->height,
++		       dpi_config->bg_width, dpi_config->bg_height,
++		       dpi_config->clk_pol, dpi_config->de_pol,
++		       dpi_config->vsync_pol, dpi_config->vsync_pulse_width,
++		       dpi_config->vsync_back_porch, dpi_config->vsync_front_porch,
++		       dpi_config->hsync_pol, dpi_config->hsync_pulse_width,
++		       dpi_config->hsync_back_porch, dpi_config->hsync_front_porch,
++		       dpi_config->format, dpi_config->rgb_order,
++		       dpi_config->i2x_en, dpi_config->i2x_edge, dpi_config->lvds_tx_en);
+ 		ddp_dpi_ConfigCLK(module, cmdq_handle, dpi_config->clk_pol, dpi_config->lvds_tx_en);
+ 		ddp_dpi_ConfigSize(module, cmdq_handle, dpi_config->width, dpi_config->height);
+ 		ddp_dpi_ConfigBG(module, cmdq_handle, true, dpi_config->bg_width,
+### drivers/misc/mediatek/video/mt8167/videox/debug.c
+--- a/drivers/misc/mediatek/video/mt8167/videox/debug.c
++++ b/drivers/misc/mediatek/video/mt8167/videox/debug.c
+@@ -129,7 +129,7 @@
+ 
+ static bool enable_ovl1_to_mem = true;
+ 
+-unsigned int g_mobilelog;
++unsigned int g_mobilelog;	/* MAIC: back to 0. Display works now; ~749 pr_err sites were flooding the 64K ram console and wrapping away the first 2.5s, which is where every driver probes. */
+ /* --------------------------------------------------------------------------- */
+ /* Information Dump Routines */
+ /* --------------------------------------------------------------------------- */
+### drivers/misc/mediatek/video/mt8167/videox/mtkfb.c
+--- a/drivers/misc/mediatek/video/mt8167/videox/mtkfb.c
++++ b/drivers/misc/mediatek/video/mt8167/videox/mtkfb.c
+@@ -514,6 +514,8 @@
+ 	struct disp_input_config *input;
+ 
+ 	DISPFUNC();
++	/* MAIC diag: after the declarations -- this tree builds with -Werror=declaration-after-statement */
++	pr_err("MAIC pan: yoffset=%u xres=%u bpp=%u\n", var->yoffset, var->xres, var->bits_per_pixel);
+ 
+ 	if (no_update) {
+ 		DISPMSG("FB_ACTIVATE_NO_UPDATE flag found, ignore mtkfb_pan_display_impl\n");
+@@ -843,6 +845,12 @@
+ 	fb_layer.layer_rotation = MTK_FB_ORIENTATION_0;
+ 	fb_layer.layer_type = LAYER_2D;
+ 	DISPDBG("mtkfb_set_par, fb_layer.src_fmt=%x\n", fb_layer.src_fmt);
++	/* MAIC diag: pr_err so it survives to last_kmsg (DISPDBG is pr_debug = no-op here) */
++	pr_err("MAIC set_par: bpp=%u xres=%u yres=%u xvirt=%u blue.off=%u fmt=0x%x "
++	       "pitch=%u line_len=%u yoff=%u pa=%p\n",
++	       bpp, var->xres, var->yres, var->xres_virtual, var->blue.offset,
++	       fb_layer.src_fmt, fb_layer.src_pitch, fbi->fix.line_length,
++	       var->yoffset, fb_layer.src_phy_addr);
+ 
+ 	session_input = kzalloc(sizeof(*session_input), GFP_KERNEL);
+ 	if (!session_input)
+### drivers/power/mediatek/battery_meter.c
+--- a/drivers/power/mediatek/battery_meter.c
++++ b/drivers/power/mediatek/battery_meter.c
+@@ -551,7 +551,7 @@
+ 	while (!of_property_read_u32_index(np, node_srting, idx, &addr)) {
+ 		idx++;
+ 		if (!of_property_read_u32_index(np, node_srting, idx, &val)) {
+-			battery_log(BAT_LOG_CRTI, "batt_temperature_table: addr: %d, val: %d idx: %d\n",
++			battery_log(BAT_LOG_FULL, "batt_temperature_table: addr: %d, val: %d idx: %d\n",
+ 				addr, val, idx);
+ 		}
+ 		profile_p->percentage = addr;
+@@ -620,7 +620,7 @@
+ 	while (!of_property_read_u32_index(np, "batt_temperature_table", idx, &addr)) {
+ 		idx++;
+ 		if (!of_property_read_u32_index(np, "batt_temperature_table", idx, &val)) {
+-			battery_log(BAT_LOG_CRTI, "batt_temperature_table: addr: %d, val: %d\n",
++			battery_log(BAT_LOG_FULL, "batt_temperature_table: addr: %d, val: %d\n",
+ 				    addr, val);
+ 		}
+ 		Batt_Temperature_Table[idx / 2].BatteryTemp = addr;
+### drivers/soc/mediatek/mtk-scpsys-mt8167.c
+--- a/drivers/soc/mediatek/mtk-scpsys-mt8167.c
++++ b/drivers/soc/mediatek/mtk-scpsys-mt8167.c
+@@ -131,6 +131,39 @@
+ 	return -EINVAL;
+ }
+ 
++/*
++ * MAIC diag: the markers above fire at ~0.5-1.7s, but the persistent console is a 64K ring
++ * that must stay byte-compatible with stock's pstore layout, so on a long or chatty boot the
++ * early lines wrap away before anyone can read them. Re-print the same facts as a compact
++ * summary from a late delayed work, which lands in the TAIL of the ring and therefore
++ * survives. Also prints once more at +25s, past the 31s watchdog's usual firing point, so a
++ * hang still leaves a readable record.
++ */
++int maic_pd_on, maic_pd_off, maic_disp_on, maic_disp_off;
++static int maic_summary_runs;
++EXPORT_SYMBOL(maic_disp_off);
++static struct delayed_work maic_summary_work;
++static void maic_summary_fn(struct work_struct *w)
++{
++	pr_err("MAIC SUMMARY: pd_on=%d pd_off=%d disp_on=%d disp_off=%d\n",
++	       maic_pd_on, maic_pd_off, maic_disp_on, maic_disp_off);
++	if (maic_disp_off)
++		pr_err("MAIC SUMMARY: DISP POWER DOMAIN WAS TURNED OFF -- display teardown happened\n");
++	else
++		pr_err("MAIC SUMMARY: disp domain still powered -- teardown did NOT happen\n");
++	/* Re-arm once. The device has hung ~5s into recovery, so a single late snapshot
++	 * would never run; fire early for the hang case and again later if we survive. */
++	if (++maic_summary_runs < 3)
++		schedule_delayed_work(&maic_summary_work, msecs_to_jiffies(12000));
++}
++static int __init maic_summary_init(void)
++{
++	INIT_DELAYED_WORK(&maic_summary_work, maic_summary_fn);
++	schedule_delayed_work(&maic_summary_work, msecs_to_jiffies(3000));
++	return 0;
++}
++late_initcall(maic_summary_init);
++
+ static int scpsys_power_on(struct generic_pm_domain *genpd)
+ {
+ 	struct scp_domain *scpd = container_of(genpd, struct scp_domain, genpd);
+@@ -143,6 +176,14 @@
+ 	int ret;
+ 	int i;
+ 
++	/* MAIC diag: name only -- NO register reads here. Reading gated DISP
++	 * registers bus-faults and reboots the device (learned the hard way).
++	 * This pins down the exact moment the DISP power domain dies. */
++	maic_pd_on++;
++	if (genpd->name && !strcmp(genpd->name, "disp"))
++		maic_disp_on++;
++	pr_err("MAIC scpsys: power ON  domain '%s'\n", genpd->name);
++
+ 	if (scpd->supply) {
+ 		ret = regulator_enable(scpd->supply);
+ 		if (ret)
+@@ -255,6 +296,14 @@
+ 	int ret;
+ 	int i;
+ 
++	/* MAIC diag: name only -- NO register reads here. Reading gated DISP
++	 * registers bus-faults and reboots the device (learned the hard way).
++	 * This pins down the exact moment the DISP power domain dies. */
++	maic_pd_off++;
++	if (genpd->name && !strcmp(genpd->name, "disp"))
++		maic_disp_off++;
++	pr_err("MAIC scpsys: power OFF domain '%s'\n", genpd->name);
++
+ 	if (scpd->data->bus_prot_mask) {
+ 		ret = mtk_infracfg_set_bus_protection(scp->infracfg,
+ 				scpd->data->bus_prot_mask);
+### sound/soc/mediatek/mt8167/mt8167_evb.c
+--- a/sound/soc/mediatek/mt8167/mt8167_evb.c
++++ b/sound/soc/mediatek/mt8167/mt8167_evb.c
+@@ -376,8 +376,12 @@
+ 		.name = "2ND EXT Codec",
+ 		.cpu_dai_name = "2ND I2S",
+ 		.no_pcm = 1,
+-		.codec_name = "snd-soc-dummy",
+-		.codec_dai_name = "snd-soc-dummy-dai",
++		/* MAIC: was snd-soc-dummy, so the amp was never bound and ad82584f_init() -- which
++	 * does the reset, the 134-register init and the final unmute (reg 0x02) -- never
++	 * ran, leaving the speakers silent. Stock binds it here: its log shows
++	 * "ad82584f <-> 2ND I2S mapping ok" where ours shows "snd-soc-dummy-dai". */
++		.codec_name = "ad82584f.1-0031",
++		.codec_dai_name = "ad82584f",
+ 		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
+ 			   SND_SOC_DAIFMT_CBS_CFS,
+ 		.dpcm_playback = 1,

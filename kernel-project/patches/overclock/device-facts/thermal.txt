@@ -1,0 +1,91 @@
+Linux version 4.4.22 (root@bbf13c661ee2) (gcc version 4.9.x 
+== /sys/class/thermal/thermal_zone0 type=mtktswmt temp=57000 mode=disabled policy=backward_compatible
+   trip_point_0_temp=120000 type=active
+== /sys/class/thermal/thermal_zone1 type=mtktsbattery temp=25000 mode=disabled policy=backward_compatible
+   trip_point_0_temp=62000 type=active
+   trip_point_1_temp=59000 type=active
+   trip_point_2_temp=57000 type=active
+   trip_point_3_temp=55000 type=active
+== /sys/class/thermal/thermal_zone2 type=mtktscpu temp=55100 mode=disabled policy=backward_compatible
+   trip_point_0_temp=117000 type=active
+   trip_point_1_temp=107000 type=active
+   trip_point_2_temp=100000 type=active
+   trip_point_3_temp=89000 type=active
+   trip_point_4_temp=85534 type=active
+   trip_point_5_temp=80445 type=active
+== /sys/class/thermal/thermal_zone3 type=mtktspmic temp=47000 mode=disabled policy=backward_compatible
+   trip_point_0_temp=120000 type=active
+   trip_point_1_temp=100000 type=active
+== /sys/class/thermal/thermal_zone4 type=mtktsAP temp=50000 mode=disabled policy=backward_compatible
+   trip_point_0_temp=100000 type=active
+   trip_point_1_temp=52000 type=active
+   trip_point_2_temp=45000 type=active
+== /sys/class/thermal/cooling_device0 type=mtk-cl-shutdown02 cur=0 max=1
+== /sys/class/thermal/cooling_device1 type=mtk-cl-shutdown01 cur=0 max=1
+== /sys/class/thermal/cooling_device10 type=mtk-cl-kshutdown00 cur=0 max=1
+== /sys/class/thermal/cooling_device11 type=mtk-cl-cam02 cur=0 max=1
+== /sys/class/thermal/cooling_device12 type=mtk-cl-cam01 cur=0 max=1
+== /sys/class/thermal/cooling_device13 type=mtk-cl-cam00 cur=0 max=1
+== /sys/class/thermal/cooling_device14 type=mtk-cl-cam-urgent cur=0 max=1
+== /sys/class/thermal/cooling_device15 type=mtk-cl-vrt00 cur=0 max=1
+== /sys/class/thermal/cooling_device16 type=mtk-cl-fps03 cur=0 max=1
+== /sys/class/thermal/cooling_device17 type=mtk-cl-fps02 cur=0 max=1
+== /sys/class/thermal/cooling_device18 type=mtk-cl-fps01 cur=0 max=1
+== /sys/class/thermal/cooling_device19 type=mtk-cl-fps00 cur=0 max=1
+== /sys/class/thermal/cooling_device2 type=mtk-cl-shutdown00 cur=0 max=1
+== /sys/class/thermal/cooling_device20 type=mtk-cl-adp-fps cur=0 max=1
+== /sys/class/thermal/cooling_device21 type=mtktswmt-sysrst cur=0 max=1
+== /sys/class/thermal/cooling_device22 type=mtktswmt-pa1 cur=0 max=1
+== /sys/class/thermal/cooling_device23 type=mtktswmt-pa2 cur=0 max=1
+== /sys/class/thermal/cooling_device24 type=mtk-cl-bcct02 cur=0 max=1
+== /sys/class/thermal/cooling_device25 type=mtk-cl-bcct01 cur=0 max=1
+== /sys/class/thermal/cooling_device26 type=mtk-cl-bcct00 cur=0 max=1
+== /sys/class/thermal/cooling_device27 type=abcct cur=1 max=1
+== /sys/class/thermal/cooling_device28 type=abcct_lcmoff cur=0 max=1
+== /sys/class/thermal/cooling_device29 type=mtktsbattery-sysrst cur=0 max=1
+== /sys/class/thermal/cooling_device3 type=mtk-cl-backlight01 cur=0 max=1
+== /sys/class/thermal/cooling_device30 type=cpu00 cur=0 max=1
+== /sys/class/thermal/cooling_device31 type=cpu01 cur=0 max=1
+== /sys/class/thermal/cooling_device32 type=cpu02 cur=0 max=1
+== /sys/class/thermal/cooling_device33 type=cpu03 cur=0 max=1
+== /sys/class/thermal/cooling_device34 type=cpu04 cur=0 max=1
+== /sys/class/thermal/cooling_device35 type=cpu05 cur=0 max=1
+== /sys/class/thermal/cooling_device36 type=cpu06 cur=0 max=1
+== /sys/class/thermal/cooling_device37 type=cpu07 cur=0 max=1
+== /sys/class/thermal/cooling_device38 type=cpu08 cur=0 max=1
+== /sys/class/thermal/cooling_device39 type=cpu09 cur=0 max=1
+== /sys/class/thermal/cooling_device4 type=mtk-cl-backlight02 cur=0 max=1
+== /sys/class/thermal/cooling_device40 type=cpu10 cur=0 max=1
+== /sys/class/thermal/cooling_device41 type=cpu11 cur=0 max=1
+== /sys/class/thermal/cooling_device42 type=cpu12 cur=0 max=1
+== /sys/class/thermal/cooling_device43 type=cpu13 cur=0 max=1
+== /sys/class/thermal/cooling_device44 type=cpu14 cur=0 max=1
+== /sys/class/thermal/cooling_device45 type=cpu15 cur=0 max=1
+== /sys/class/thermal/cooling_device46 type=cpu16 cur=0 max=1
+== /sys/class/thermal/cooling_device47 type=cpu17 cur=0 max=1
+== /sys/class/thermal/cooling_device48 type=cpu18 cur=0 max=1
+== /sys/class/thermal/cooling_device49 type=cpu19 cur=0 max=1
+== /sys/class/thermal/cooling_device5 type=mtk-cl-backlight03 cur=0 max=1
+== /sys/class/thermal/cooling_device50 type=cpu20 cur=0 max=1
+== /sys/class/thermal/cooling_device51 type=cpu21 cur=0 max=1
+== /sys/class/thermal/cooling_device52 type=cpu22 cur=0 max=1
+== /sys/class/thermal/cooling_device53 type=cpu23 cur=0 max=1
+== /sys/class/thermal/cooling_device54 type=cpu24 cur=0 max=1
+== /sys/class/thermal/cooling_device55 type=cpu25 cur=0 max=1
+== /sys/class/thermal/cooling_device56 type=cpu26 cur=0 max=1
+== /sys/class/thermal/cooling_device57 type=cpu27 cur=0 max=1
+== /sys/class/thermal/cooling_device58 type=cpu28 cur=0 max=1
+== /sys/class/thermal/cooling_device59 type=cpu29 cur=0 max=1
+== /sys/class/thermal/cooling_device6 type=mtk-cl-kshutdown04 cur=0 max=1
+== /sys/class/thermal/cooling_device60 type=cpu30 cur=0 max=1
+== /sys/class/thermal/cooling_device61 type=cpu31 cur=0 max=1
+== /sys/class/thermal/cooling_device62 type=cpu32 cur=0 max=1
+== /sys/class/thermal/cooling_device63 type=cpu33 cur=0 max=1
+== /sys/class/thermal/cooling_device64 type=mtktscpu-sysrst cur=0 max=1
+== /sys/class/thermal/cooling_device65 type=cpu_adaptive_0 cur=0 max=1
+== /sys/class/thermal/cooling_device66 type=cpu_adaptive_1 cur=0 max=1
+== /sys/class/thermal/cooling_device67 type=cpu_adaptive_2 cur=0 max=1
+== /sys/class/thermal/cooling_device68 type=mtktspmic-sysrst cur=0 max=1
+== /sys/class/thermal/cooling_device7 type=mtk-cl-kshutdown03 cur=0 max=1
+== /sys/class/thermal/cooling_device8 type=mtk-cl-kshutdown02 cur=0 max=1
+== /sys/class/thermal/cooling_device9 type=mtk-cl-kshutdown01 cur=0 max=1

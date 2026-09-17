@@ -1,0 +1,51 @@
+# MAIC filesystems/compression fragment (docs/research/filesystems-compression.md).
+# All built-in: CONFIG_MODULES is off on this kernel.
+
+# zram with LZ4 (zram's own backend on 4.4; no crypto API needed)
+CONFIG_ZRAM=y
+CONFIG_ZRAM_LZ4_COMPRESS=y
+
+# NTFS: read-only in kernel. Write access, if ever wanted, is ntfs-3g (FUSE).
+CONFIG_NTFS_FS=y
+# CONFIG_NTFS_DEBUG is not set
+# CONFIG_NTFS_RW is not set
+
+# overlayfs (Docker overlay2, Magisk-style overlays)
+CONFIG_OVERLAY_FS=y
+
+# squashfs with LZ4 and XZ (plus zlib/lzo, cheap)
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_XATTR=y
+CONFIG_SQUASHFS_ZLIB=y
+CONFIG_SQUASHFS_LZ4=y
+CONFIG_SQUASHFS_LZO=y
+CONFIG_SQUASHFS_XZ=y
+
+# SMB/CIFS client. 4.4 cannot build CIFS without SMB1; use vers=2.1/3.0 when
+# mounting. Weak LANMAN/plaintext password hashing stays off.
+CONFIG_NETWORK_FILESYSTEMS=y
+CONFIG_CIFS=y
+CONFIG_CIFS_SMB2=y
+CONFIG_CIFS_XATTR=y
+# CONFIG_CIFS_POSIX is not set
+# CONFIG_CIFS_FSCACHE is not set
+# CONFIG_CIFS_WEAK_PW_HASH is not set
+# CONFIG_CIFS_UPCALL is not set
+# CONFIG_CIFS_DFS_UPCALL is not set
+# CONFIG_CIFS_STATS is not set
+# CONFIG_CIFS_DEBUG is not set
+# CONFIG_NFS_FS is not set
+# CONFIG_NFSD is not set
+# CONFIG_CEPH_FS is not set
+# CONFIG_NCP_FS is not set
+# CONFIG_CODA_FS is not set
+# CONFIG_AFS_FS is not set
+
+# F2FS: for mounting external media only. Do NOT convert /data (wipes the rescue image).
+CONFIG_F2FS_FS=y
+CONFIG_F2FS_FS_XATTR=y
+CONFIG_F2FS_FS_SECURITY=y
+
+# exFAT (fs/exfat, vendored from namjaejeon/linux-exfat-oot 68072a2d)
+CONFIG_EXFAT_FS=y
+CONFIG_EXFAT_DEFAULT_IOCHARSET="utf8"

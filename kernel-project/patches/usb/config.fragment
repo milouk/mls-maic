@@ -1,0 +1,29 @@
+# USB host class drivers — append to kernel-project/config/maic_defconfig
+# Built and verified in isolated volume maic-work-usb with GCC 4.9 (build exit 0).
+# All are built-in (=y): CONFIG_MODULES is off. olddefconfig kept every one (no dep drops).
+# CONFIG_USB_WDM is auto-selected by CDC_MBIM; no need to list it.
+# Do NOT add CONFIG_USB_OTG / CONFIG_USB_OTG_WHITELIST (they restrict which devices work).
+
+# --- strongly recommended (the common real-world devices) ---
+CONFIG_USB_ANNOUNCE_NEW_DEVICES=y   # dmesg VID/PID+product on every plug — triage aid
+CONFIG_USB_UAS=y                    # USB-C SSD bridges (falls back to BOT)
+CONFIG_USB_ACM=y                    # CDC-ACM: Arduino, modems, many serial gadgets
+CONFIG_USB_NET_RNDIS_HOST=y         # Android phone USB tethering
+CONFIG_USB_RTL8152=y                # RTL8152/8153 — the most common USB-C Ethernet chip
+CONFIG_USB_SERIAL_GENERIC=y
+CONFIG_USB_SERIAL_FTDI_SIO=y        # FTDI USB-serial
+CONFIG_USB_SERIAL_CP210X=y          # Silicon Labs CP210x
+CONFIG_USB_SERIAL_CH341=y           # WCH CH340/CH341 (cheap clones)
+CONFIG_USB_SERIAL_PL2303=y          # Prolific PL2303
+
+# --- optional (breadth; harmless, dormant until matching HW appears) ---
+CONFIG_USB_IPHETH=y                 # iPhone USB tethering
+CONFIG_USB_NET_CDC_EEM=y
+CONFIG_USB_NET_CDC_MBIM=y           # LTE modems (selects USB_WDM)
+CONFIG_USB_NET_QMI_WWAN=y           # Qualcomm LTE modems
+CONFIG_USB_NET_SMSC95XX=y           # SMSC95xx Ethernet (e.g. some hubs)
+CONFIG_USB_NET_DM9601=y             # Davicom DM9601 Ethernet
+CONFIG_HID_MULTITOUCH=y             # USB touch panels
+CONFIG_INPUT_JOYSTICK=y
+CONFIG_JOYSTICK_XPAD=y              # Xbox controllers
+CONFIG_HID_SONY=y                   # PlayStation controllers (deps NEW_LEDS/LEDS_CLASS already y)

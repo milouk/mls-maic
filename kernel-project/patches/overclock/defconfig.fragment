@@ -1,0 +1,15 @@
+# MAIC undervolt/overclock options -- source: kernel-project/patches/overclock/overclock.patch
+# Both default OFF. With both off the build is functionally identical to the parity kernel
+# (verified: mt8167-cpufreq.o/mtk_gpufreq.o sections byte-identical, mtk_ptp.o differs only in
+# 60 __LINE__ constants shifted by 12).
+#
+# CPU: adds 1400000 kHz @ 1325000 uV and 1500000 kHz @ 1350000 uV OPPs on the 1.3G efuse bin.
+#      They are DORMANT at boot (policy max = 1300000); raise scaling_max_freq to use them.
+#      PTP/EEM is kept away from them (it only sees OPPs <= 1300 MHz).
+# CONFIG_MAIC_CPU_OC=y
+#
+# GPU: 500M GE8300 table (494000 kHz @ 1.25 V) + real vcore switching clamped to 1150-1250 mV.
+#      Only after the CPU stages pass; see test-plan.md stage 5.
+# CONFIG_MAIC_GPU_OC=y
+# CONFIG_MAIC_CPU_OC is not set
+# CONFIG_MAIC_GPU_OC is not set

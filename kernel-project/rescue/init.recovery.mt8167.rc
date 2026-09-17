@@ -1,0 +1,42 @@
+on early-init
+    wait /dev/.coldboot_done 1000
+
+on init
+#	fake to CDP case
+#	write /sys/module/musb_hdrc/parameters/musb_skip_charge_detect 1
+
+# 	set battery thread free
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/idVendor 0E8D
+    write /sys/class/android_usb/android0/idProduct 2008
+    write /sys/class/android_usb/android0/functions mtp
+    write /sys/class/android_usb/android0/enable 1
+
+#	make this twice to keep following action not race with batyery thread
+    write /sys/class/android_usb/android0/enable 0
+    write /sys/class/android_usb/android0/idVendor 0E8D
+    write /sys/class/android_usb/android0/idProduct 2008
+    write /sys/class/android_usb/android0/functions mtp
+    write /sys/class/android_usb/android0/enable 1
+
+# 	distinguish USB shoulde connect or not by this, CDP vs SDP
+	write /sys/devices/platform/mt_usb/cmode 2
+
+on property:ro.debuggable=1
+# 	restore cmode to normal for making USB enumeration
+	write /sys/devices/platform/mt_usb/cmode 1
+
+on fs
+    symlink /dev/block/platform/soc/11120000.mmc /dev/block/platform/bootdevice
+
+# MAIC: restore the boot partition when an operator has armed it from Android.
+# Does nothing at all unless /data/maic_rescue/DO_RESTORE exists, mounts
+# userdata READ-ONLY, and always exits 0. Not critical, so a failure here can
+# never make init reboot. Runs after the bootdevice symlink above, though the
+# binary also falls back to the raw /dev/block/mmcblk0p* nodes.
+service maic_rescue /sbin/maic_rescue
+    oneshot
+    seclabel u:r:recovery:s0
+
+on fs
+    start maic_rescue

@@ -1,0 +1,6 @@
+id=maic-usbmount
+name=MAIC USB exFAT/NTFS mount helper
+version=v1
+versionCode=1
+author=milouk
+description=Adds maic-usbmount: mounts exFAT (rw) and NTFS (read-only) USB sticks, which Android 7 vold cannot, and exposes them at /storage/usbotg. Manual command, no background service.

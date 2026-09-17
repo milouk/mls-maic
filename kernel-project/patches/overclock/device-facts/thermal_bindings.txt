@@ -1,0 +1,135 @@
+available_policies
+cdev0
+cdev0_trip_point
+cdev0_weight
+cdev1
+cdev1_trip_point
+cdev1_weight
+cdev2
+cdev2_trip_point
+cdev2_weight
+cdev3
+cdev3_trip_point
+cdev3_weight
+cdev4
+cdev4_trip_point
+cdev4_weight
+cdev5
+cdev5_trip_point
+cdev5_weight
+integral_cutoff
+k_d
+k_i
+k_po
+k_pu
+mode
+offset
+passive
+policy
+power
+slope
+subsystem
+sustainable_power
+temp
+trip_point_0_temp
+trip_point_0_type
+trip_point_1_temp
+trip_point_1_type
+trip_point_2_temp
+trip_point_2_type
+trip_point_3_temp
+trip_point_3_type
+trip_point_4_temp
+trip_point_4_type
+trip_point_5_temp
+trip_point_5_type
+type
+uevent
+cdev0 -> cpu_adaptive_2 trip=5
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev0_trip_point/type: Not a directory
+cdev0_trip_point ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev0_weight/type: Not a directory
+cdev0_weight ->  trip=
+cdev1 -> cpu_adaptive_1 trip=4
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev1_trip_point/type: Not a directory
+cdev1_trip_point ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev1_weight/type: Not a directory
+cdev1_weight ->  trip=
+cdev2 -> cpu_adaptive_0 trip=3
+cdev2_trip_point ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev2_trip_point/type: Not a directory
+cdev2_weight ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev2_weight/type: Not a directory
+cdev3 -> mtktscpu-sysrst trip=0
+cdev3_trip_point ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev3_trip_point/type: Not a directory
+cdev3_weight ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev3_weight/type: Not a directory
+cdev4 -> cpu00 trip=2
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev4_trip_point/type: Not a directory
+cdev4_trip_point ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev4_weight/type: Not a directory
+cdev4_weight ->  trip=
+cdev5 -> mtk-cl-shutdown00 trip=1
+cdev5_trip_point ->  trip=
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev5_trip_point/type: Not a directory
+/system/bin/sh: cat: /sys/class/thermal/thermal_zone2/cdev5_weight/type: Not a directory
+cdev5_weight ->  trip=
+clabcct
+clabcct_lcmoff
+clatm
+clatm_gpu_threshold
+clatm_setting
+clbcct
+clfps
+clfps_adp
+clfps_level
+clsd_dbt
+clsd_pid
+clsd_rst
+clthp
+clwmt_pid
+clwmt_val
+clwmt_wfdstat
+mtm_indicator
+mtm_monitor
+mtm_scen_call
+tzbattery
+tzbts
+tzbts_param
+tzcpu
+tzcpu_GPIO_out_monitor
+tzcpu_Tj_out_via_HW_pin
+tzcpu_cal
+tzcpu_fastpoll
+tzcpu_log
+tzcpu_read_temperature
+tzcpu_set_temperature
+tzcpu_talking_flag
+tzpmic
+tzwmt
+wifi_in_soc
+[tscpu_read]6
+trip_0=117000 0 mtktscpu-sysrst
+trip_1=107000 0 mtk-cl-shutdown00
+trip_2=100000 0 cpu00
+trip_3=89000 0 cpu_adaptive_0
+trip_4=85534 0 cpu_adaptive_1
+trip_5=80445 0 cpu_adaptive_2
+trip_6=45000 0 n0-cooler
+trip_7=35000 0 no-cooler
+trip_8=25000 0 no-cooler
+trip_9=15000 0 no-cooler
+interval=250
+g 0 403000 711
+g 1 299000 548
+g 2 253500 466
+d 0 0
+d 1 0
+d 2 0
+d 3 0
+d 4 0
+root      27    2     0      0     rescuer_th 0000000000 S perf
+system    348   1     4948   1980  hrtimer_na 00edca94e0 S /vendor/bin/thermal
+system    349   1     11100  3136  hrtimer_na 7530d8a004 S /vendor/bin/thermald
+system    1801  354   1438364 66156 SyS_epoll_ 7a119ba614 S com.mediatek.thermalmanager

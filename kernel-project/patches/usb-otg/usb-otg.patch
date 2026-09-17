@@ -1,0 +1,6 @@
+# usb-otg.patch -- intentionally empty.
+# This workstream is config-only: no kernel source files were changed.
+# Verified with `diff -rq` of maic-wt-usb:/src/linux against maic-kernel:/src/linux on 2026-09-15.
+# The only difference found was drivers/misc/mediatek/imgsensor/src/mt8167/camera_hw/kd_camera_hw.c,
+# which changed in the LIVE tree (separate camera work) after this copy was taken -- not part of USB OTG.
+# Apply this workstream by appending defconfig.fragment to kernel-project/config/maic_defconfig.

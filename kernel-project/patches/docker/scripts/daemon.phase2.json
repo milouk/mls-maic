@@ -1,0 +1,15 @@
+{
+  "data-root": "/data/docker/lib",
+  "exec-root": "/data/docker/run",
+  "pidfile": "/data/docker/run/docker.pid",
+  "hosts": ["unix:///data/docker/run/docker.sock"],
+  "storage-driver": "overlay2",
+  "iptables": true,
+  "ip6tables": false,
+  "bip": "172.17.0.1/16",
+  "dns": ["1.1.1.1", "1.1.1.1"],
+  "log-driver": "json-file",
+  "log-opts": {"max-size": "5m", "max-file": "2"},
+  "max-concurrent-downloads": 2,
+  "features": {"buildkit": false}
+}

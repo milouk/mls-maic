@@ -1,0 +1,84 @@
+#!/system/bin/sh
+# MAIC: mount exFAT / NTFS USB storage on Android 7 (vold only handles vfat).
+#
+#   su -mm -c 'maic-usbmount mount [/dev/block/sdXN]'   # default: first unmounted sd* partition
+#   su -mm -c 'maic-usbmount umount'
+#   su -mm -c 'maic-usbmount status'
+#
+# "su -mm" runs in the global mount namespace; without it the mount is only
+# visible inside the su shell.
+#
+# Grounded in this ROM's boot ramdisk:
+#   init.project.rc: tmpfs on /mnt/media_rw and /storage/usbotg, and
+#     service fuse_usbotg /system/bin/sdcard -u 1023 -g 1023 -w 1023 -d /mnt/media_rw/usbotg /storage/usbotg
+#   fstab.mt8167:    /devices/platform/mt_usb*  auto vfat  voldmanaged=usbotg:auto
+# So vfat sticks keep going through vold untouched; this helper is for the
+# exfat/ntfs sticks vold reports as unmountable. It reuses stock's usbotg mount
+# point and FUSE service rather than inventing new paths.
+#
+# NOT VERIFIED ON DEVICE: whether apps see /storage/usbotg without a reboot (Android 7
+# per-app mount namespaces). If an app cannot see it, a root file manager can
+# still read /mnt/media_rw/usbotg directly. See test-plan.md.
+MP=/mnt/media_rw/usbotg
+AID_MEDIA_RW=1023
+
+die() { echo "maic-usbmount: $*" >&2; exit 1; }
+fstype() {   # toybox blkid prints: DEV: LABEL="x" UUID="y" TYPE="exfat"
+  blkid "$1" 2>/dev/null | sed -n 's/.*TYPE="\([^"]*\)".*/\1/p'
+}
+mounted() { grep -q " $MP " /proc/mounts; }
+
+case "$1" in
+mount)
+  [ "$(id -u)" = 0 ] || die "run as root (su -mm -c ...)"
+  mounted && die "$MP already mounted; run: maic-usbmount umount"
+  DEV=$2
+  if [ -z "$DEV" ]; then
+    for d in /dev/block/sd[a-z][0-9]* /dev/block/sd[a-z]; do
+      [ -b "$d" ] || continue
+      grep -q "^$d " /proc/mounts && continue
+      case "$(fstype $d)" in exfat|ntfs) DEV=$d; break ;; esac
+    done
+    [ -n "$DEV" ] || die "no unmounted exfat/ntfs block device found (vfat sticks are handled by Android)"
+  fi
+  [ -b "$DEV" ] || die "$DEV is not a block device"
+  T=$(fstype "$DEV")
+  mkdir -p "$MP"
+  case "$T" in
+    exfat)
+      grep -qw exfat /proc/filesystems || die "kernel has no exfat support"
+      mount -t exfat -o nosuid,nodev,noexec,noatime,uid=$AID_MEDIA_RW,gid=$AID_MEDIA_RW,fmask=0007,dmask=0007,iocharset=utf8 "$DEV" "$MP" || die "exfat mount failed"
+      ;;
+    ntfs)
+      grep -qw ntfs /proc/filesystems || die "kernel has no ntfs support"
+      mount -t ntfs -o ro,nosuid,nodev,noexec,noatime,uid=$AID_MEDIA_RW,gid=$AID_MEDIA_RW,umask=0007,nls=utf8 "$DEV" "$MP" || die "ntfs mount failed"
+      echo "note: NTFS is read-only in this kernel (write support would need ntfs-3g)"
+      ;;
+    vfat) die "$DEV is vfat: Android mounts it itself; nothing to do" ;;
+    "")   die "could not detect a filesystem on $DEV" ;;
+    *)    die "unsupported filesystem '$T' on $DEV" ;;
+  esac
+  chown $AID_MEDIA_RW:$AID_MEDIA_RW "$MP" 2>/dev/null
+  if getprop | grep -q "init.svc.fuse_usbotg"; then
+    start fuse_usbotg && sleep 1
+    echo "mounted $DEV ($T) at $MP; fuse_usbotg: $(getprop init.svc.fuse_usbotg) -> /storage/usbotg"
+  else
+    echo "mounted $DEV ($T) at $MP (fuse_usbotg service not found; use a root file manager on $MP)"
+  fi
+  ;;
+umount)
+  [ "$(id -u)" = 0 ] || die "run as root (su -mm -c ...)"
+  stop fuse_usbotg 2>/dev/null
+  sync
+  mounted || die "$MP is not mounted"
+  umount "$MP" || die "umount failed (files open?)"
+  echo "unmounted $MP; safe to remove the stick"
+  ;;
+status)
+  grep " $MP \| /storage/usbotg " /proc/mounts || echo "nothing mounted at $MP"
+  echo "fuse_usbotg: $(getprop init.svc.fuse_usbotg)"
+  for d in /dev/block/sd*; do [ -b "$d" ] && echo "$d: $(fstype $d)"; done 2>/dev/null
+  ;;
+*)
+  sed -n '4,9p' "$0"; exit 2 ;;
+esac

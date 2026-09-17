@@ -1,0 +1,50 @@
+--- a/mm/memcontrol.c	2026-09-15 12:14:20.346413010 +0000
++++ b/mm/memcontrol.c	2026-09-15 12:14:20.351457386 +0000
+@@ -5343,7 +5343,12 @@
+ 	.css_reset = mem_cgroup_css_reset,
+ 	.can_attach = mem_cgroup_can_attach,
+ 	.cancel_attach = mem_cgroup_cancel_attach,
+-	.attach = mem_cgroup_move_task,
++	/* MAIC: upstream 264a0ae164bc ("memcg: relocate charge moving from ->attach to
++	 * ->post_attach", v4.6-rc5, in 4.4.9 stable) moved this hook and changed
++	 * mem_cgroup_move_task() to take no argument.  This vendor tree carries the new
++	 * signature and the cgroup core's post_attach call, but still assigned .attach,
++	 * which never mattered because stock never built CONFIG_MEMCG. */
++	.post_attach = mem_cgroup_move_task,
+ 	.bind = mem_cgroup_bind,
+ 	.dfl_cftypes = memory_files,
+ 	.legacy_cftypes = mem_cgroup_legacy_files,
+--- a/net/netfilter/xt_qtaguid.c	2026-09-15 12:14:20.343259344 +0000
++++ b/net/netfilter/xt_qtaguid.c	2026-09-15 12:14:20.348413010 +0000
+@@ -865,7 +865,7 @@
+ {
+ 	struct proc_iface_stat_fmt_info *p = m->private;
+ 	struct iface_stat *iface_entry;
+-	struct rtnl_link_stats64 dev_stats, *stats;
++	struct rtnl_link_stats64 *stats;
+ 	struct rtnl_link_stats64 no_dev_stats = {0};
+ 
+ 
+@@ -874,12 +874,16 @@
+ 
+ 	iface_entry = list_entry(v, struct iface_stat, list);
+ 
+-	if (iface_entry->active) {
+-		stats = dev_get_stats(iface_entry->net_dev,
+-				      &dev_stats);
+-	} else {
+-		stats = &no_dev_stats;
+-	}
++	/* MAIC (Docker): never call dev_get_stats() here.  Once container veth
++	 * interfaces are created and destroyed, iface_entry->net_dev can be stale
++	 * or NULL while ->active is still set, and netd reading
++	 * /proc/net/xt_qtaguid/iface_stat_fmt then NULL-derefs and the device
++	 * reboots.  Report zero device counters instead; the via-dev totals
++	 * (totals_via_dev) are unaffected.  Same fix as the Android-Docker guides:
++	 *   https://gist.github.com/FreddieOliveira/efe850df7ff3951cb62d74bd770dce27
++	 *   https://github.com/OshekharO/Docker-On-Android (README, xt_qtaguid.c)
++	 */
++	stats = &no_dev_stats;
+ 	/*
+ 	 * If the meaning of the data changes, then update the fmtX
+ 	 * string.

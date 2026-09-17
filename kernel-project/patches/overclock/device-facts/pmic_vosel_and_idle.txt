@@ -1,0 +1,28 @@
+# Captured read-only on our kernel 4.4.22 (root@bbf13c661ee2), 2026-09-15.
+# MT6392 PMIC VOSEL registers via /sys/kernel/debug/regmap/1000f000.pwrap/registers
+# (dd bs=11 skip=reg/2 count=1). VOSEL -> mV = 700 + val*6.25
+
+# single read
+0220: 004c      # VPROC_VOSEL_ON = 76 -> 1175.00 mV (cpu at 1300 MHz, PTP-adjusted)
+0314: 0048      # VCORE_VOSEL_ON = 72 -> 1150.00 mV
+
+# 200 consecutive reads of each, with SODI (cpuidle state1) usage delta measured around the loop
+     83 0220: 004c   # 1175.00 mV
+    117 0220: 004d   # 1181.25 mV  (cpufreq requests vproc..vproc+10mV tolerance)
+    200 0314: 0048   # 1150.00 mV  -- never 0x44 (1125 mV)
+SODI entries during sampling: 27020
+
+# Conclusion: SODI's PMIC-wrap table (mtk_spm_internal.c) contains fixed 1125 mV VCORE_VOSEL_ON
+# entries (IDX_SO_VSRAM_CA7_FAST_TRSN_EN/DIS) but vcore is never observed at 1125 mV after ~27k
+# SODI cycles, so the SODI firmware does not use those entries. The VPROC "normal" entry is a live
+# backup of VPROC_VOSEL_ON taken in __spm_set_pmic_phase(), so SODI restores whatever vproc
+# cpufreq set (incl. overclock OPP voltages).
+
+# cpuidle states on cpu0 (/sys/devices/system/cpu/cpu0/cpuidle/state*)
+state0 name=dpidle usage=0      disable=0   # deep idle never entered on this device
+state1 name=SODI   usage=278973 disable=0
+state2 name=MCDI   usage=0      disable=0
+state3 name=slidle usage=0      disable=0
+state4 name=rgidle usage=0      disable=0
+# NOTE: dpidle's table writes VCORE_PDN 1125/900 mV; it is unused here. If it ever becomes
+# active, GPU OC's raised vcore would not survive it -- re-check before enabling GPU OC.

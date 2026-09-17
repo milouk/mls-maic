@@ -1,0 +1,6 @@
+id=maic-docker-resolv
+name=MAIC Docker resolv.conf
+version=v1
+versionCode=1
+author=maic
+description=Provides /system/etc/resolv.conf so dockerd can resolve DNS (host has no resolv.conf; Android uses netd).

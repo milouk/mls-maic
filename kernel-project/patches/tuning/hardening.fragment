@@ -1,0 +1,48 @@
+# MAIC kernel hardening fragment — 4.4.302 / GCC 5.4 / arm64 Cortex-A35.
+# All verified ABSENT/off in out_rm2/.config on 2026-09-17; all free (no source patch),
+# blob-safe (no ION/DDK/ABI change), and GCC-5.4-compatible. Apply with olddefconfig, then
+# VERIFY each landed =y (dependencies can silently drop one). Needs a rebuild + SUPERVISED flash.
+#
+# Deliberately NOT here (see improvements-backlog.md for why):
+#   CONFIG_RANDOMIZE_BASE (KASLR) — needs LK entropy MT8167 lacks; bootloader = brick risk.
+#   CONFIG_FORTIFY_SOURCE — added in 4.13, absent in 4.4.
+#   KPTI/retpoline/SSBD — Cortex-A35 not affected.
+#   CONFIG_USER_NS — leave OFF (rootful docker; off = no unprivileged-userns attack surface).
+
+# CONFIG_DEBUG_RODATA — REMOVED, BREAKS BOOT. Verified 2026-09-17: rm6 (this flag + SW_TTBR0_PAN)
+# flashed clean (readback OK) but did NOT boot; the device was rescued to stock. DEBUG_RODATA
+# without DEBUG_ALIGN_RODATA makes kernel text read-only against a non-section-aligned rodata
+# region, and runtime text patching (ftrace/jump_label/Magisk) faults. Do NOT re-enable on this
+# vendor 4.4 tree. (rm5 and rm6 configs are byte-identical -> both unbootable; do not flash either.)
+# CONFIG_DEBUG_RODATA is not set
+# CONFIG_DEBUG_SET_MODULE_RONX is not set
+
+# stack-protector: REGULAR, not STRONG. Verified 2026-09-17: STRONG adds canaries to enough
+# functions that drivers/misc/mediatek/cameraisp/.../camera_isp.c ISP_ioctl goes 1456 > 1400 B
+# and that driver hardcodes -Werror=frame-larger-than -> build fails. REGULAR (canaries only on
+# funcs with >8-byte char arrays) builds clean and still catches the classic stack-buffer overflow.
+# CONFIG_CC_STACKPROTECTOR_NONE is not set
+CONFIG_CC_STACKPROTECTOR_REGULAR=y
+
+# CONFIG_HARDENED_USERCOPY — DEFERRED. Verified 2026-09-17: enabling it breaks the build,
+# mm/slub.c references struct kmem_cache.red_left_pad which this 4.4 vendor tree never backported
+# (partial usercopy backport). Needs the upstream 4.6 SLUB left-redzone struct fields ported first,
+# or the usercopy slab path adapted. Real security value (bounds-checks copy_to/from_user, hardens
+# the confirmed-live USB class-driver surface) but it's a source change, not a config flip.
+
+# CONFIG_ARM64_SW_TTBR0_PAN — REMOVED, PRIME CAUSE of the rm6 no-boot (2026-09-17). Cortex-A35 is
+# ARMv8.0 (no hardware PAN), so CONFIG_ARM64_PAN (=y in the base) is a no-op and SW_TTBR0_PAN is the
+# only real enforcement — and MTK's 4.4 vendor drivers do raw user-pointer derefs that fault under
+# it during early boot. Do NOT re-enable on this vendor tree.
+# CONFIG_ARM64_SW_TTBR0_PAN is not set
+
+# fair-queue CoDel qdisc — enables net.core.default_qdisc=fq_codel (bufferbloat) for the LAN box
+CONFIG_NET_SCH_FQ_CODEL=y
+
+# --- ARMv8 hardware crypto extensions (A35 confirmed: cpuinfo has aes pmull sha1 sha2 crc32) ---
+# ALREADY on in the base config (active in /proc/crypto): CONFIG_ARM64_CRYPTO,
+# CONFIG_CRYPTO_AES_ARM64_CE, _CE_BLK, CONFIG_CRYPTO_SHA2_ARM64_CE. These add the rest:
+CONFIG_CRYPTO_GHASH_ARM64_CE=y   # AES-GCM (the dominant TLS/HTTPS AEAD) — the real streaming win
+CONFIG_CRYPTO_SHA1_ARM64_CE=y    # HW SHA1
+CONFIG_CRYPTO_AES_ARM64_CE_CCM=y # AES-CCM (WPA / some TLS)
+# CONFIG_CRYPTO_CRC32_ARM64_CE — not an option in this tree; skip (crc32c-generic stays).
