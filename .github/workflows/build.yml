@@ -1,0 +1,55 @@
+name: build
+
+# Manual trigger only. Building a 2016-era vendor kernel in generic CI is fragile,
+# so run it on demand rather than on every push. Switch to a push trigger once a
+# manual run is confirmed green.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build maic-4.4.302 (GCC 4.9)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout (patches and scripts)
+        uses: actions/checkout@v4
+
+      - name: Set swap to 5 GiB
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev \
+            libncurses5-dev device-tree-compiler lzop zip
+
+      - name: Fetch the MT8167 vendor kernel source (4.4.22)
+        run: |
+          git clone --depth=1 -b 4.4.22 \
+            https://github.com/XiKoTaSu/android_kernel_eebbk_mt8167 src
+
+      - name: Fetch the AOSP GCC 4.9 aarch64 toolchain
+        run: |
+          git clone --depth=1 -b android-7.0.0_r36 \
+            https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 gcc
+
+      - name: Apply the MAIC kernel patches
+        working-directory: src
+        run: |
+          patch -p1 < ../kernel-project/patches/all-kernel-changes.patch
+
+      - name: Build Image.gz
+        working-directory: src
+        run: |
+          export ARCH=arm64 SUBARCH=arm64
+          export CROSS_COMPILE="$GITHUB_WORKSPACE/gcc/bin/aarch64-linux-android-"
+          make O=out tb8167p3_64_defconfig
+          make -j"$(nproc)" O=out Image.gz KCFLAGS="-Wno-error"
+
+      - name: Upload Image.gz
+        uses: actions/upload-artifact@v4
+        with:
+          name: Image.gz
+          path: src/out/arch/arm64/boot/Image.gz
