@@ -183,7 +183,7 @@ unshare -m sh -c '
 
 The first thing I put in a container was unbound, a full recursive DNS resolver, so the tablet answers its own lookups from the root servers down instead of trusting whatever DNS the network hands it. WireGuard is the headline act, the reason the kernel work was worth it, but a private recursive resolver humming along next to it on a 2 GB kitchen display is the kind of absurd that makes me grin every time I remember it is running.
 
-![docker ps over SSH from my Mac](<Screenshot 2026-09-17 at 23.42.00 2.png>)
+![docker ps over SSH from my Mac](docker-ssh.png)
 *Real Docker on Android 7, seen over SSH from my Mac. `docker ps` shows the unbound recursive resolver up.*
 
 - **Filesystems**, exFAT, NTFS, ext4 and f2fs, all built in, so any USB stick just mounts.
