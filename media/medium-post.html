@@ -1,0 +1,138 @@
+<!doctype html><html><head><meta charset="utf-8"><title>MAIC</title><style>body{max-width:720px;margin:40px auto;font:19px/1.65 Georgia,serif;color:#222;padding:0 16px}
+h1{font-size:2.1em;line-height:1.2}h2{font-size:1.5em;margin-top:1.7em}h3{font-size:1.2em;margin-top:1.4em}
+pre{background:#f4f4f4;padding:14px;overflow:auto;border-radius:6px;font:14px/1.5 Menlo,monospace}
+code{background:#eee;padding:1px 5px;border-radius:3px;font-family:Menlo,monospace;font-size:.85em}
+pre code{background:none;padding:0}img{max-width:100%;display:block;margin:1em auto}
+em{color:#666;font-size:.9em}a{color:#1a73e8}</style></head><body><h1>From locked kiosk to a self-built kernel: reviving the MLS MAIC, end to end</h1>
+<p><em>A discontinued Greek smart display, a frozen Android 7 vendor kernel, and everything it took to make boot flashing reversible so I could actually experiment. Root, drivers written and reverse-engineered, WireGuard, unbound, and two builds that refused to boot.</em></p>
+<p>I have unfinished business with the MLS MAIC.</p>
+<p>It is a small smart display from MLS Innovation, a Greek electronics company that no longer exists. Android 7, a Greek voice assistant behind glass, no updates, no published kernel source, no Google services. Years ago I <a href="https://xdaforums.com/t/mls-maic-smart-assistant-location-problem-please-help.4499895/#post-88644027">found the way out of its kiosk and posted it on XDA</a>, so people could reach the Android underneath. Mine has been the little TV I keep on while I cook ever since. Escaping the kiosk was always step one of a longer project I never finished. This is me finishing it.</p>
+<p><img alt="The MLS MAIC on the counter" src="PXL_20260917_210346305.jpg" />
+<em>The kitchen TV in question, app drawer open. Magisk, SimpleSSHD, Termux, Greek TV and Radio and the rest, on hardware its maker walked away from.</em></p>
+<p>Fair warning, this is the long technical version. The short one is the repo: https://github.com/milouk/mls-maic</p>
+<h2>Getting in without a cable</h2>
+<p>Temp root comes from MediaTek's <code>mtk-su</code>, Diplomatic's privilege-escalation exploit. It grants root over plain wireless ADB, no A-to-A cable, no BROM:</p>
+<pre><code class="language-sh">adb shell '/data/local/tmp/mtk-su64 -c /system/bin/sh -c &quot;id&quot;'
+# → uid=0(root) gid=0(root) ...
+</code></pre>
+<p>That one property matters more than it looks. Everything risky I did later leaned on the fact that I could always get root back over Wi-Fi, whatever state the device was in.</p>
+<h2>Permanent root, and a hard version ceiling</h2>
+<p>Root became permanent with a Magisk-patched boot on <code>mmcblk0p9</code>. The snag is that this legacy boot depends on the <code>skip_initramfs</code> to <code>want_initramfs</code> patch, and Magisk removed it in later versions. So there is a ceiling, and it is 25.2. I do not trust that from a changelog, I verify it against the actual image before flashing:</p>
+<pre><code class="language-sh"># both daemon binaries actually embedded and byte-identical to source
+magiskboot cpio ramdisk.cpio &quot;exists overlay.d/sbin/magisk64.xz&quot;
+# kernel patch actually applied
+magiskboot hexpatch kernel 736B69705F696E697472616D6673 ...
+# ^ this should find NOTHING. skip_initramfs must be gone. If it patches, STOP.
+</code></pre>
+<p>Get it wrong and the device still boots, but <code>su</code> is a dead symlink to a zero-byte file. Ask me how I know.</p>
+<h2>The certificate trap that cost a day</h2>
+<p>Every HTTPS stream was failing. The error looked like a bad certificate. It was not:</p>
+<pre><code>javax.net.ssl.SSLHandshakeException
+ Caused by: java.security.cert.CertificateException
+ Caused by: java.lang.NullPointerException:
+   ...getSubjectX500Principal() on a null object reference
+   at android.security.net.config.DirectoryCertificateSource.findCerts
+</code></pre>
+<p>Android builds its trust store by walking every file in the cacerts directory. If a single file there cannot be read or parsed, the whole walk returns null and TLS dies for the entire app, even for sites whose CA is perfectly fine. The ROM had never shipped Let's Encrypt's roots, and a stray file with wrong permissions took down the rest. The fix injects the ISRG roots on boot and enforces <code>0644 root:root</code> with the correct SELinux context on all 150 certs, every boot.</p>
+<h2>The status bar, one byte of resources.arsc</h2>
+<p>There was no notification shade because MLS had set <code>status_bar_height</code> to <code>0dp</code> in <code>framework-res.apk</code>. SystemUI was drawing the status bar window at zero pixels tall. Patching it to <code>24dp</code> changes exactly one byte of <code>resources.arsc</code>, then re-signing with the AOSP platform key (the key that actually signed this ROM) so PackageManager still accepts it. Shipped as a Magisk module that replaces an existing file, never one that adds files, which matters for reasons the cacerts trap already taught me.</p>
+<h2>Building a kernel, and a four-day black screen</h2>
+<p>The stock 4.4.22 was a dead end, so I rebuilt from the vendor base. The first four days were a black screen, and the answer was the compiler. A GCC 7.5 build died before the first initcall (<code>/proc/aed/reboot-reason</code> showed <code>last init function 0x0</code>). Only a GCC 4.9 build, the toolchain the stock kernel was built with, actually boots this tree. The whole build lives in Docker so the toolchain is reproducible and never rots. And there is no UART on this board, no serial header to solder to, so all four of those days were debugged blind, through pstore and the MediaTek reboot-reason record, never a live log.</p>
+<p><img alt="Kernel version in Android Settings" src="kernel-settings.png" />
+<em>The payoff, in Android's own Settings. Kernel 4.4.302 on an iQR70 running Android 7, built by hand.</em></p>
+<h2>The drivers, where a self-built kernel actually lives or dies</h2>
+<p>A vendor kernel is not really "source you compile." It is a minefield of board-specific assumptions, and building your own detonates every mine the stock build happened to tiptoe around. Some of this was writing new code, a <code>__setup</code> handler here, a 5 KB freestanding recovery binary there. Most of it was reverse-engineering: decompiling the stock drivers, diffing symbol sizes against the stock binary byte for byte, and working out what mine were doing that theirs quietly was not. Almost every fix is one or two tokens, which is exactly what makes driver work equal parts thrilling and humiliating.</p>
+<h3>Display: the kernel owned nothing it was drawing</h3>
+<p>The screen would render correctly and then go green a split second later. To prove the hardware path was fine I turned on <code>CONFIG_VT</code> and <code>FRAMEBUFFER_CONSOLE</code>, and the kernel drew the Tux logo at framebuffer registration with no userspace involved, then went green anyway. So a known-good configuration was being torn down very early, in kernel context.</p>
+<p>The kernel held zero clock references on the display blocks. <code>MTK_NO_DISP_IN_LK</code> is undefined, so <code>dpmgr_path_start()</code> runs only in decouple mode and is skipped in DIRECT_LINK. <code>dpmgr_path_init()</code> is commented out. <code>disp_probe</code> does <code>devm_clk_get</code> and never <code>clk_prepare_enable</code>, so <code>path_top_clock_on()</code> is never reached. The display ran entirely on the bootloader's programming, with the kernel holding no references to OVL, RDMA, COLOR, DPI0 or SMI. Then two adjacent <code>late_initcall</code>s pulled the rug out. <code>mtk_smi_init_late()</code>'s <code>pm_runtime_put_sync</code> collapsed the whole DISP power domain, and <code>clk_disable_unused()</code> switched off the gates about 291 microseconds later. The fix pins both:</p>
+<pre><code>clk_ignore_unused smi_keep_disp
+</code></pre>
+<p><code>clk_ignore_unused</code> is generic. <code>smi_keep_disp</code> is a <code>__setup()</code> I added, because the genpd teardown fires earlier and has no generic escape. The honest reframe: stock probably loses the bootloader image too and SurfaceFlinger repairs it within a frame. I was booting the recovery slot, where nothing performs that repair, so the green screen may never have been a regression at all.</p>
+<h3>Touch: one return value, and a NAK that was supposed to happen</h3>
+<p>Dead touchscreen, <code>Failed to init chip!</code>. The driver halts the controller's internal DSP by writing <code>0x88</code> to register <code>0xE0</code>, and the chip NAKs that write on purpose, because it is stopping its own I2C block. Our revision folded that expected <code>-ENXIO</code> into the return value:</p>
+<pre><code class="language-c">write_buf[0] = 0x88;
+/* Register 0xE0 = 0x88 halts the GSL's internal DSP, and the chip NAKs this
+ * write as it stops its own I2C block. Deliberately NOT accumulated into ret. */
+gsl_i2c_write_bytes(client, 0xe0, &amp;write_buf[0], 1);   /* was: ret = ... */
+</code></pre>
+<p>So <code>reset_chip()</code> returned negative, <code>init_chip()</code> aborted, <code>tpd_registration()</code> bailed, and <code>request_irq()</code> and the touch event thread never ran. The chip was healthy the entire time. All 15,213 firmware writes succeeded and <code>check_mem_data</code> read <code>0xb0 == 5a5a5a5a</code>. A decompile of stock's probe explained why stock never cared: it discards the return value and retries. A second bug hid behind the first, <code>request_irq</code> passed <code>IRQF_TRIGGER_RISING</code> where the DT declares falling, and a trigger flag in <code>request_irq</code> overrides the DT type, so ours won and was wrong. It stayed invisible for days because <code>GSL_DEBUG</code> is 0 in this tree, so only the error macro compiled in and every log looked like total failure.</p>
+<h3>Camera: a Makefile matched the wrong board</h3>
+<pre><code>CONFIG_ARCH_MTK_PROJECT=tb8167p3_64  -&gt;  findstring tb8167p  -&gt;  -DDEMO_BOARD_SUPPORT=1
+</code></pre>
+<p>That single <code>findstring</code> forced the legacy-GPIO branch of <code>kd_camera_hw.c</code>, whose <code>mtkcam_gpio_init()</code> is an empty stub and whose <code>mtkcam_gpio_set()</code> drives <code>cam0_rst</code> and <code>cam0_pdn</code> through GPIO numbers the DT does not provide. Both resolve to -2, <code>gpio_direction_output</code> returns <code>-EINVAL</code>, reset is never asserted, and no sensor can leave reset. Stock builds the <code>DEMO_BOARD_SUPPORT==0</code> branch, which uses the eleven pinctrl states the identical DT already defines. I verified by symbol size, not by hope: <code>mtkcam_gpio_init</code> went from 8 bytes to 408, exactly stock's size, and stock-only strings like <code>Cannot find camera pinctrl</code> appeared in the image. The sensor itself only captures once the GC5024 MIPI settle count is bumped from 14 to 85, otherwise SENINF times out having read 2452 of 2592 pixels per line.</p>
+<h3>Audio: the amp was never bound, and a memset that faulted</h3>
+<p>Two problems. First, the <code>2ND EXT Codec</code> dai_link had <code>.codec_name = "snd-soc-dummy"</code>, so <code>ad82584f_init</code>, the reset and the 134-register init sequence and the final unmute, never ran. Stock binds <code>ad82584f.1-0031</code>. One line. Second, and nastier, the 4.4 AFE path did a plain <code>memset()</code> on the DL1 SRAM buffer, which is MMIO. On arm64 <code>memset</code> uses the <code>DC ZVA</code> cache-zeroing instruction, which faults on device memory. Swapping it for <code>memset_io()</code> is what actually let the amp come up cleanly.</p>
+<h3>GPU: running an older driver than the userspace calling it</h3>
+<p>The device's GPU userspace and firmware are DDK <code>1.8@4490469</code>. My tree only shipped up to <code>m1.8ED4333936</code>, so the kernel-mode driver was older than the userspace calling into it, the dangerous direction, because the PowerVR bridge is unversioned across revisions and an older driver can be missing entry points or disagree on struct layouts. The matching revision turned out to be public in the Acer Iconia B3-A40 tree, also MT8167 on Android 7 and 4.4, and 365 files dropped straight in. The trap was that <code>gpu_rgx/Makefile</code>'s version selector is a no-op <code>ifeq</code> with both branches hardcoding the same path, so the directory name is the only thing that actually chooses a revision.</p>
+<h3>The drivers I deleted, and the one I had to</h3>
+<p><code>sym827</code>, <code>nau8540</code>, <code>stk8baxx</code> and <code>mc3433</code> were all absent from the stock binary and observably failing to probe, so out they came and the image lost 200 KB. <code>sym827</code> was not merely unnecessary, it was actively dangerous. The DT marks it <code>regulator-always-on</code> for vproc, so a failing driver is worse than none. It has a latent <code>regulator_unregister(ERR_PTR)</code> panic in PID 1. And it <code>gpio_request</code>s pin 34, which is a live DPI data line, with no <code>gpio_free</code> on any path, while MediaTek's pinctrl physically re-muxes that pin to GPIO mode. Vproc is really fed by the MT6392 PMIC anyway. As a bonus horror, <code>stk8baxx</code> calls <code>sys_fchmodat()</code> to make its raw I2C sysfs nodes world-writable.</p>
+<h3>Knowing when to stop</h3>
+<p>A full-boot audit at <code>loglevel=5</code>, chosen because <code>console_loglevel</code> gates what reaches pstore before the per-console loop and so acts as a single capture-volume knob, turned up 68 distinct error shapes. Exactly two were mine, the deliberate touch NAK and some accelerometer-core noise. Both fixed. The other 66 are stock's, and stock ships anyway. That number is what told me the bring-up was done.</p>
+<h2>The 4 MiB ceiling, and a bootloop that lied</h2>
+<p>At one point the device bootlooped and the log blamed SELinux:</p>
+<pre><code>init: SELinux: Could not open sepolicy: No such file or directory
+init: failed to load policy: No such file or directory
+init: Security failure, rebooting into recovery mode...
+</code></pre>
+<p>The log was wrong. The real cause was DRAM placement. A boot or recovery ramdisk on this device must stay under exactly 4,194,304 bytes compressed, because LK copies each blob to a fixed address and the DTB puts the diagnostic region immediately above it:</p>
+<pre><code>ram_console-reserved-memory@44400000   0x44400000
+budget = 0x44400000 - 0x44000000 = 4 MiB
+</code></pre>
+<p>Go over and <code>ramoops_init</code> (a <code>postcore_initcall</code>) zaps those zones before <code>populate_rootfs</code> (a <code>rootfs_initcall</code>) ever decompresses the initramfs living there. gzip is a stream, so corruption near the end destroys the tail of the cpio, <code>/sepolicy</code> sits about 95 percent in, it vanishes, and init reboots into the same broken image. <code>mkboot.py</code> now reads the ceiling from the DTB node names and refuses to pack anything over it.</p>
+<h2>The rescue, 5 KB of freestanding C</h2>
+<p>Here is the piece that made everything else possible. Flashing <code>p9</code> used to be a one-way door. A kernel that boots but never reaches usable Android leaves no way back in. So before any risky flash, a tiny freestanding binary in the recovery ramdisk restores a known-good image from <code>/data</code>, and it validates before it ever writes:</p>
+<ul>
+<li>No <code>DO_RESTORE</code> trigger: it does nothing at all, a normal recovery boot is untouched.</li>
+<li>Image not exactly 16 MiB: refused.</li>
+<li>No <code>ANDROID!</code> magic: refused, that is not a boot image.</li>
+<li>Ramdisk blob is <code>RECOVERY</code> and not <code>ROOTFS</code>: refused, that is a recovery image, not a boot one.</li>
+</ul>
+<p>It opens the boot partition for writing only after every check passes, writes, fsyncs, reads back, compares a checksum, and always exits 0 so init never treats it as failed. Verified in anger:</p>
+<pre><code>maic_rescue: image validated; writing boot partition
+maic_rescue: SUCCESS: boot partition restored and verified
+</code></pre>
+<p>Why freestanding C and not a script? Stock recovery has no shell, and Magisk's 1.7 MB static busybox does not fit under that 4 MiB ceiling. A raw-syscall binary costs 5 KB.</p>
+<h2>The features, once flashing was safe</h2>
+<p>With a working rescue I stopped being scared of the boot partition, and that is the whole trick. The shipping kernel (<code>maic-4.4.302</code>) gained:</p>
+<ul>
+<li><strong>Camera capture</strong>, from the GC5024 settle fix above.</li>
+<li><strong>An overclock</strong> that lifts the top operating point from the stock 1.3 GHz to 1.5 GHz, with the interactive governor ranging 598 to 1500 MHz and a thermal throttle that actually lowers the frequency. The vendor code only cut core count, a no-op with hotplug off. Validated over a four-day soak, 85 C peak, zero mismatches.</li>
+<li><strong>Hardware crypto</strong>, because the A35 does carry the ARMv8 extensions (<code>aes pmull sha1 sha2</code> in <code>/proc/cpuinfo</code>), so enabling the CE drivers was a real config-only win.</li>
+<li><strong>The 2024 USB exploit-chain CVE fixes</strong>, CVE-2024-53104, 50302 and 53197, backported and source-gated.</li>
+<li><strong>WireGuard, in-kernel.</strong> The backport is clean. You drop the compat source into the tree and wire it up:</li>
+</ul>
+<pre><code class="language-sh">ln -sfT &quot;$WG/src&quot; &quot;$K/net/wireguard&quot;
+sed -i &quot;/CONFIG_NETFILTER.*+=/a obj-\$(CONFIG_WIREGUARD) += wireguard/&quot; &quot;$K/net/Makefile&quot;
+sed -i &quot;/^if INET\$/a source \&quot;net/wireguard/Kconfig\&quot;&quot; &quot;$K/net/Kconfig&quot;
+</code></pre>
+<p>This kernel has no loadable-module support, so it builds in as <code>=y</code>. 116 <code>wg_</code> symbols end up in the image, and <code>ip link add wg0 type wireguard</code> just works.</p>
+<ul>
+<li><strong>Real Docker on Android 7.</strong> The kernel gained overlayfs and the missing cgroup and namespace controllers, then three host workarounds got it running. My favorite is <code>/run</code>. The rootfs is read-only and non-remountable and <code>/run</code> does not exist, and dockerd 25.x hardcodes <code>/run/docker/plugins</code>, so I give it a writable <code>/run</code> inside its own private mount namespace where the real system never sees it:</li>
+</ul>
+<pre><code class="language-sh">unshare -m sh -c '
+  busybox mount -o remount,rw /
+  mkdir -p /run
+  busybox mount -o remount,ro /
+  mount -t tmpfs tmpfs /run
+  ... exec dockerd
+'
+</code></pre>
+<p>The first thing I put in a container was unbound, a full recursive DNS resolver, so the tablet answers its own lookups from the root servers down instead of trusting whatever DNS the network hands it. WireGuard is the headline act, the reason the kernel work was worth it, but a private recursive resolver humming along next to it on a 2 GB kitchen display is the kind of absurd that makes me grin every time I remember it is running.</p>
+<p><img alt="docker ps over SSH from my Mac" src="Screenshot 2026-09-17 at 23.42.00 2.png" />
+<em>Real Docker on Android 7, seen over SSH from my Mac. <code>docker ps</code> shows the unbound recursive resolver up.</em></p>
+<ul>
+<li><strong>Filesystems</strong>, exFAT, NTFS, ext4 and f2fs, all built in, so any USB stick just mounts.</li>
+</ul>
+<h2>The two builds that refused to boot</h2>
+<p>Not everything worked. Two hardening builds turned on <code>DEBUG_RODATA</code> and software PAN, and they would not boot at all:</p>
+<pre><code>&lt; # CONFIG_ARM64_SW_TTBR0_PAN is not set
+&gt; CONFIG_ARM64_SW_TTBR0_PAN=y
+&lt; # CONFIG_DEBUG_RODATA is not set
+&gt; CONFIG_DEBUG_RODATA=y
+</code></pre>
+<p>The A35 is ARMv8.0, so hardware PAN is a no-op and software PAN becomes the real enforcement. MediaTek's vendor drivers dereference user pointers directly, so it faults in early boot. On most projects that is a dead device. Here the rescue caught it twice and restored stock on its own. The shipping kernel keeps the crypto and the CVE fixes and drops those two options. I never touched a cable, and the kitchen never noticed.</p>
+<h2>Where it landed</h2>
+<p>A discontinued smart display, first pried open years ago on XDA, is now a rooted and hardened tablet that streams TV, terminates a WireGuard tunnel, resolves its own DNS through unbound, and runs Docker containers, all on a frozen vendor kernel I dragged forward by hand, driver by driver.</p>
+<p>And here is the part I am quietly smug about. Not one cable was involved in any of it. Rooting, every kernel flash, both rescues, all of it happened over Wi-Fi from a terminal on my Mac. No UART, no USB, no BROM. The device never once left the kitchen counter.</p>
+<p>None of it was necessary. That is exactly why it was worth doing.</p>
+<p>Everything is here: https://github.com/milouk/mls-maic</p></body></html>
