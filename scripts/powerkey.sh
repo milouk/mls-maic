@@ -32,6 +32,23 @@
 # accumulates, so a naive watcher simply never fires. busybox `script` allocates a pty,
 # which makes it line-buffered. This is the same class of trap as debugfs needing `cat`
 # instead of `cp`.
+# Re-exec as a session leader. busybox `script` allocates a pty and makes it our
+# controlling terminal (TIOCSCTTY), which ONLY a session leader may do. magiskd launches
+# service.d scripts as plain background children (NOT session leaders), so without this
+# `script` exits instantly at boot and the watcher spins forever in its reattach loop,
+# blind to every key -- while a hand-started copy from a shell works fine, which is what
+# made this so confusing. setsid gives us a fresh session so `script` can grab its pty.
+if [ -z "$MAIC_PK_SID" ]; then
+  export MAIC_PK_SID=1
+  SETSID=$(command -v setsid 2>/dev/null)
+  [ -z "$SETSID" ] && [ -x /system/bin/setsid ] && SETSID=/system/bin/setsid
+  [ -z "$SETSID" ] && [ -x /data/local/busybox ] && SETSID="/data/local/busybox setsid"
+  # Only exec if we actually found setsid; a failed exec would kill the watcher outright.
+  [ -n "$SETSID" ] && exec $SETSID sh "$0" "$@"
+  # Fall through unelevated if setsid is somehow missing: may hit the reattach loop, but
+  # that is strictly better than the watcher not running at all.
+fi
+
 TAG=maic_powerkey
 LOG=/data/local/maic_powerkey.log
 DEV=/dev/input/event3
