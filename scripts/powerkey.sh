@@ -19,9 +19,12 @@
 # So we sample the backlight INSTANTLY at key-down (a fast cat, before the wake ramp):
 #   bl==0  means it was Asleep -> the key-down already woke it, do nothing
 #   bl>0   means Awake or Dreaming -> read mWakefulness (now reliable, no auto-wake):
-#            Awake    -> sleep (KEYCODE_SLEEP 223)
-#            Dreaming -> wake  (KEYCODE_WAKEUP 224)
-# Both keyevents are verified working on this ROM. KEYCODE_POWER (26) is useless here, it
+#            Awake    -> drop into the deskclock daydream (Somnambulator)
+#            Dreaming -> wake (KEYCODE_WAKEUP 224)
+# The "off" direction is the daydream, NOT KEYCODE_SLEEP: the owner wants the clock as the
+# idle screen (the panel is on AC 24/7 and dims itself overnight), so the button just
+# toggles between the app and the clock. Set MAIC_PK_OFF=sleep to blank fully instead.
+# KEYCODE_WAKEUP (224) is verified on this ROM; KEYCODE_POWER (26) is useless here, it
 # lands back in MLS's dead broadcast path.
 #
 # BUFFERING GOTCHA: getevent uses stdio, which block-buffers (4K) whenever stdout is not a
@@ -34,6 +37,8 @@ LOG=/data/local/maic_powerkey.log
 DEV=/dev/input/event3
 BL=/sys/class/leds/lcd-backlight/brightness
 LONG_PRESS_MS=450          # AOSP shows the global-actions menu at 500ms; stay under it
+OFF_ACTION="${MAIC_PK_OFF:-daydream}"   # "daydream" (show the clock) or "sleep" (blank)
+DREAM="am start -n com.android.systemui/.Somnambulator"
 
 # Singleton guard. Without it, every launch (boot script + any manual start) stacks another
 # watcher on the same input device, and a single press then fires the action N times.
@@ -64,8 +69,13 @@ toggle() {
   fi
   wf=$(dumpsys power 2>/dev/null | grep -m1 mWakefulness=)
   case "$wf" in
-    *Awake*) log "  bl@down=$bl0 state=$wf -> sleep (223)"; input keyevent 223 ;;
-    *)       log "  bl@down=$bl0 state=$wf -> wake (224)";  input keyevent 224 ;;
+    *Awake*)
+      if [ "$OFF_ACTION" = "sleep" ]; then
+        log "  bl@down=$bl0 state=$wf -> sleep (223)"; input keyevent 223
+      else
+        log "  bl@down=$bl0 state=$wf -> daydream"; $DREAM >/dev/null 2>&1
+      fi ;;
+    *)  log "  bl@down=$bl0 state=$wf -> wake (224)";  input keyevent 224 ;;
   esac
 }
 
