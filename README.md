@@ -96,8 +96,8 @@ every removal is reversible with `cmd package install-existing`.
 ## Part 2: The custom kernel
 
 The stock 4.4.22 was a dead end, so this rebuilds the kernel from the vendor base and
-adds real capabilities. The shipping build is **`maic-4.4.302`** (rm8), built with
-GCC 5.4.
+adds real capabilities. The shipping build is **`maic-4.4.302`** (rm9), built with
+GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
 
 ### What we built and how it went
 
@@ -111,13 +111,22 @@ GCC 5.4.
   options and keeps everything else.
 - **Then the good builds.** rm7 added hardware crypto and the USB security fixes, and
   rm8 added in-kernel WireGuard. Each was flashed supervised with the rescue armed.
+- **rm9 (current): memory and polish.** Added `KSM` (kernel samepage merging) to dedup
+  RAM across the Docker containers and app set on this 2 GB device, plus A35
+  instruction-scheduling tuning. It also carries a set of log-and-driver clean-ups found
+  by auditing the boot log: guarding the camera driver's vestigial GPIO requests (which
+  removed 8 boot-time `WARN` backtraces), demoting a once-a-second charger status line
+  that was flooding and evicting the kernel ring buffer, and splitting a DPI pin out of a
+  drive-strength group so the panel pinctrl applies cleanly instead of failing and
+  reverting.
 
 ```mermaid
 flowchart LR
     rm4["rm4 (daily): camera, audio, overclock"] --> rm7["rm7: + crypto CE, USB CVEs"]
     rm4 -.->|hardening attempt| rm56["rm5 / rm6: DEBUG_RODATA + SW PAN"]
     rm56 -->|"did not boot"| rescue["auto-rescue restored stock"]
-    rm7 --> rm8["rm8 (shipping): + WireGuard"]
+    rm7 --> rm8["rm8: + WireGuard"]
+    rm8 --> rm9["rm9 (shipping): + KSM, A35 tune, log/driver fixes"]
 ```
 
 ### Kernel features
@@ -133,7 +142,9 @@ flowchart LR
 | Filesystems | exFAT, NTFS, ext4, f2fs, vfat and iso9660 built in |
 | Network | `fq_codel` as the default qdisc (bufferbloat) |
 | Container | overlayfs and full cgroup and namespace support for Docker |
-| Memory | tuned `dirty_ratio`, `page-cluster` and `extra_free_kbytes` for the 2 GB target |
+| Memory | `KSM` samepage merging (RAM dedup across containers and apps), zram with the `lz4` compressor, and tuned `dirty_ratio`, `page-cluster` and `extra_free_kbytes` for the 2 GB target |
+| Build | GCC 5.4 with `-mtune=cortex-a35` (in-order-pipeline scheduling for this CPU) |
+| Fixes | camera-driver GPIO `WARN` guard, charger status-line log-spam demoted, DPI panel pin-35 drive-strength split, and gslX680 touch coordinate calibration (`cal_*`) |
 
 Left out on purpose: `DEBUG_RODATA` and `ARM64_SW_TTBR0_PAN` (they do not boot on this
 SoC), KASLR (no bootloader entropy), and anything that bumps the GPU DDK or the

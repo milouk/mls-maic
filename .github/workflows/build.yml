@@ -1,14 +1,17 @@
 name: build
 
-# Manual trigger only. Building a 2016-era vendor kernel in generic CI is fragile,
-# so run it on demand rather than on every push. Switch to a push trigger once a
-# manual run is confirmed green.
+# Manual trigger. Building a 2016-era vendor kernel in generic CI is fragile, so run it
+# on demand. A green run builds the kernel from the vendor 4.4.22 source + our patch set
+# and publishes it as a GitHub Release.
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write   # needed to publish the release
+
 jobs:
   build:
-    name: Build maic-4.4.302 (GCC 4.9)
+    name: Build & release maic-4.4.302 (GCC 4.9)
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout (patches and scripts)
@@ -40,16 +43,52 @@ jobs:
         run: |
           patch -p1 < ../kernel-project/patches/all-kernel-changes.patch
 
+      - name: Configure (vendor defconfig + MAIC options)
+        working-directory: src
+        run: |
+          export ARCH=arm64 SUBARCH=arm64
+          make O=out tb8167p3_64_defconfig
+          # MAIC feature configs applied on top of the vendor defconfig:
+          #   KSM = kernel samepage merging (RAM dedup for the 2 GB Docker/app load)
+          bash scripts/config --file out/.config --enable KSM
+          make O=out olddefconfig
+          echo "KSM: $(grep -E '^CONFIG_KSM=' out/.config)"
+
       - name: Build Image.gz
         working-directory: src
         run: |
           export ARCH=arm64 SUBARCH=arm64
           export CROSS_COMPILE="$GITHUB_WORKSPACE/gcc/bin/aarch64-linux-android-"
-          make O=out tb8167p3_64_defconfig
           make -j"$(nproc)" O=out Image.gz KCFLAGS="-Wno-error"
+          ls -la out/arch/arm64/boot/Image.gz
 
-      - name: Upload Image.gz
+      - name: Upload Image.gz artifact
         uses: actions/upload-artifact@v4
         with:
           name: Image.gz
           path: src/out/arch/arm64/boot/Image.gz
+
+      - name: Compute release tag
+        id: tag
+        run: echo "tag=maic-4.4.302-$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release (latest kernel)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: MAIC kernel ${{ steps.tag.outputs.tag }}
+          make_latest: true
+          files: src/out/arch/arm64/boot/Image.gz
+          body: |
+            Custom **MT8167** (MLS MAIC / iQR70) kernel — **Linux 4.4.302**, built in CI from
+            the vendor 4.4.22 source plus `kernel-project/patches/all-kernel-changes.patch`.
+
+            **Features:** in-kernel WireGuard · ARMv8 crypto extensions · 2024 USB CVE
+            backports · overclock 598-1500 MHz + thermal throttle · fq_codel · zram · KSM ·
+            exFAT/NTFS/ext4/f2fs · Docker (overlayfs/cgroups/namespaces) · camera GPIO,
+            charger-log-spam and panel pin-35 fixes.
+
+            > This CI artifact is built with **GCC 4.9** (the proven-to-boot toolchain) and the
+            > vendor defconfig + KSM. The device's shipping build uses GCC 5.4 with
+            > `-mtune=cortex-a35`. Flash only via the gated writer with the auto-rescue armed —
+            > see the README.

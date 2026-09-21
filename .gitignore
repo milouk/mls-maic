@@ -1,3 +1,7 @@
 kernel-project/out/
 kernel-project/__pycache__/
 .DS_Store
+
+# extracted device blobs (dtb/boot img) - reconstructed on demand, not source
+kernel-project/captures/
+kernel-project/out/

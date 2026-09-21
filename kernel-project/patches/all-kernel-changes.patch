@@ -340,3 +340,106 @@
  		.dai_fmt = SND_SOC_DAIFMT_I2S | SND_SOC_DAIFMT_NB_NF |
  			   SND_SOC_DAIFMT_CBS_CFS,
  		.dpcm_playback = 1,
+
+### rm9 additions (2026-09-21): charger log-spam, camera GPIO guard, panel pin-35 drive-strength
+diff --git a/arch/arm64/boot/dts/mediatek/tb8167p3_64.dts b/arch/arm64/boot/dts/mediatek/tb8167p3_64.dts
+index d32bacb..1d8bb18 100644
+--- a/arch/arm64/boot/dts/mediatek/tb8167p3_64.dts
++++ b/arch/arm64/boot/dts/mediatek/tb8167p3_64.dts
+@@ -550,7 +550,6 @@
+ 			pins = <MT8167_PIN_0_EINT0__FUNC_DPI_CK>,
+ 			<MT8167_PIN_24_EINT24__FUNC_DPI_DE>,
+ 			<MT8167_PIN_25_EINT25__FUNC_DPI_VSYNC>,
+-			<MT8167_PIN_35_UTXD2__FUNC_DPI_HSYNC>,
+ 			<MT8167_PIN_13_EINT13__FUNC_DPI_D0>,
+ 			<MT8167_PIN_38_MRG_DI__FUNC_DPI_D1>,
+ 			<MT8167_PIN_39_MRG_DO__FUNC_DPI_D2>,
+@@ -571,6 +570,9 @@
+ 			<MT8167_PIN_6_EINT6__FUNC_DPI_D17>;
+ 			drive-strength = <MTK_DRIVE_4mA>;
+ 		};
++		pins_hsync {
++			pins = <MT8167_PIN_35_UTXD2__FUNC_DPI_HSYNC>;
++		};
+ 	};
+ 
+ 	mmc0_pins_default: mmc0default {
+diff --git a/arch/arm64/boot/dts/mediatek/tb8167p3_64_basic.dts b/arch/arm64/boot/dts/mediatek/tb8167p3_64_basic.dts
+index a3991cc..5db61c3 100644
+--- a/arch/arm64/boot/dts/mediatek/tb8167p3_64_basic.dts
++++ b/arch/arm64/boot/dts/mediatek/tb8167p3_64_basic.dts
+@@ -550,7 +550,6 @@
+ 			pins = <MT8167_PIN_0_EINT0__FUNC_DPI_CK>,
+ 			<MT8167_PIN_24_EINT24__FUNC_DPI_DE>,
+ 			<MT8167_PIN_25_EINT25__FUNC_DPI_VSYNC>,
+-			<MT8167_PIN_35_UTXD2__FUNC_DPI_HSYNC>,
+ 			<MT8167_PIN_13_EINT13__FUNC_DPI_D0>,
+ 			<MT8167_PIN_38_MRG_DI__FUNC_DPI_D1>,
+ 			<MT8167_PIN_39_MRG_DO__FUNC_DPI_D2>,
+@@ -571,6 +570,9 @@
+ 			<MT8167_PIN_6_EINT6__FUNC_DPI_D17>;
+ 			drive-strength = <MTK_DRIVE_4mA>;
+ 		};
++		pins_hsync {
++			pins = <MT8167_PIN_35_UTXD2__FUNC_DPI_HSYNC>;
++		};
+ 	};
+ 
+ 	mmc0_pins_default: mmc0default {
+diff --git a/drivers/misc/mediatek/imgsensor/src/mt8167/kd_sensorlist.c b/drivers/misc/mediatek/imgsensor/src/mt8167/kd_sensorlist.c
+index b07f00b..ad3ea8f 100644
+--- a/drivers/misc/mediatek/imgsensor/src/mt8167/kd_sensorlist.c
++++ b/drivers/misc/mediatek/imgsensor/src/mt8167/kd_sensorlist.c
+@@ -3774,22 +3774,22 @@ static int CAMERA_HW_probe(struct platform_device *pdev)
+ 	GPIO_CAM0_PDN = of_get_named_gpio(dev->of_node, "cam0_pdn", 0);
+ 	GPIO_CAM1_PDN = of_get_named_gpio(dev->of_node, "cam1_pdn", 0);
+ 
+-	ret = gpio_request(GPIO_CAM0_RST, "cam0_rst");
++	ret = gpio_is_valid(GPIO_CAM0_RST) ? gpio_request(GPIO_CAM0_RST, "cam0_rst") : 0;
+ 	if (ret < 0)
+ 		PK_ERR("[Camera][ERROR] Unable to request GPIO_CAM0_RST\n");
+ 
+-	ret = gpio_request(GPIO_CAM1_RST, "cam0_rst");
++	ret = gpio_is_valid(GPIO_CAM1_RST) ? gpio_request(GPIO_CAM1_RST, "cam0_rst") : 0;
+ 	if (ret < 0) {
+ 		PK_ERR("[Camera][ERROR] Unable to request GPIO_CAM1_RST\n");
+ 		if (CamUseSameRst == 1)
+ 			GPIO_CAM1_RST = GPIO_CAM0_RST;
+ 	}
+ 
+-	ret = gpio_request(GPIO_CAM0_PDN, "cam0_pdn");
++	ret = gpio_is_valid(GPIO_CAM0_PDN) ? gpio_request(GPIO_CAM0_PDN, "cam0_pdn") : 0;
+ 	if (ret < 0)
+ 		PK_ERR("[Camera][ERROR] Unable to request GPIO_CAM0_PDN\n");
+ 
+-	ret = gpio_request(GPIO_CAM1_PDN, "cam1_pdn");
++	ret = gpio_is_valid(GPIO_CAM1_PDN) ? gpio_request(GPIO_CAM1_PDN, "cam1_pdn") : 0;
+ 	if (ret < 0)
+ 		PK_ERR("[Camera][ERROR] Unable to request GPIO_CAM1_PDN\n");
+ #endif
+diff --git a/drivers/power/mediatek/battery_common.c b/drivers/power/mediatek/battery_common.c
+index 07a4b80..610a1b7 100644
+--- a/drivers/power/mediatek/battery_common.c
++++ b/drivers/power/mediatek/battery_common.c
+@@ -429,7 +429,7 @@ kal_bool upmu_is_chr_det(void)
+ 
+ 			return KAL_TRUE;
+ 		} /*else {*/
+-			battery_log(BAT_LOG_CRTI,
++			battery_log(BAT_LOG_FULL,
+ 				    "[upmu_is_chr_det] Charger exist but USB is host\n");
+ 
+ 			return KAL_FALSE;
+diff --git a/drivers/power/mediatek/battery_common_fg_20.c b/drivers/power/mediatek/battery_common_fg_20.c
+index f2886c9..2882889 100644
+--- a/drivers/power/mediatek/battery_common_fg_20.c
++++ b/drivers/power/mediatek/battery_common_fg_20.c
+@@ -461,7 +461,7 @@ kal_bool upmu_is_chr_det(void)
+ 		return KAL_TRUE;
+ 	}
+ 
+-	battery_log(BAT_LOG_CRTI, "[upmu_is_chr_det] Charger exist but USB is host\n");
++	battery_log(BAT_LOG_FULL, "[upmu_is_chr_det] Charger exist but USB is host\n");
+ 
+ 	return KAL_FALSE;
+ 

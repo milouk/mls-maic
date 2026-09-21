@@ -44,6 +44,12 @@ KCFLAGS="$(docker run --rm --platform linux/amd64 -e WARNS="$CANDIDATE_WARNINGS"
 ' 2>/dev/null | tail -1)"
 echo "KCFLAGS (accepted by GCC 5.4):$KCFLAGS"
 
+# rm9: tune instruction scheduling for this exact CPU. -mtune only changes the cost/scheduling
+# model, NOT -march/the ISA, so it cannot disturb the +crypto CE files or emit A35-unsupported
+# instructions. GCC 5.4 knows cortex-a35 (added in GCC 5).
+KCFLAGS="$KCFLAGS -mtune=cortex-a35"
+echo "KCFLAGS (+A35 tune):$KCFLAGS"
+
 set +e
 docker run --rm --platform linux/amd64 -v "$VOL":/src "$IMG" bash -c "
   set -eo pipefail
