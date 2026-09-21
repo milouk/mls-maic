@@ -19,6 +19,13 @@ mkdir -p /data/docker/etcu /data/docker/etcw
 [ -s /data/docker/cacert.pem ] || cat /system/etc/security/cacerts/* > /data/docker/cacert.pem 2>/dev/null
 # already running?
 for p in /proc/[0-9]*; do c=$(cat $p/comm 2>/dev/null); [ "$c" = dockerd ] && { docker version >/dev/null 2>&1 && { echo "dockerd already running"; exit 0; }; }; done
+# exec-root is on persistent /data (not a tmpfs like a normal /var/run), so a previous
+# boot's containerd.pid + sockets survive the reboot. dockerd then reads the stale pid,
+# decides "containerd is still running", waits for that dead process, and dies with
+# "timeout waiting for containerd to start". Clear the stale runtime state before starting.
+# (data-root /data/docker/lib is separate and left untouched -- images/containers persist.)
+rm -f /data/docker/run/containerd/containerd.pid /data/docker/run/docker.pid \
+      /data/docker/run/docker.sock /data/docker/run/containerd/containerd.sock* 2>/dev/null
 echo "=== $(date) starting dockerd (dns overlay ns + private /run) ===" >> $LOG
 # dockerd in a private mount ns: writable /run (ns-local busybox rw-remount) + /system/etc overlay for resolv.conf
 unshare -m sh -c '
