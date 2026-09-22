@@ -54,8 +54,9 @@ works on the stock kernel.
 
 ### Permanent root and recovery
 
-- **Magisk 25.2** patched boot on `mmcblk0p9`, survives reboots. Newer Magisk (26 and
-  up) cannot patch this legacy `skip_initramfs` boot, so 25.2 is the ceiling.
+- **Magisk 30.7** patched boot on `mmcblk0p9`, survives reboots. This legacy image ships
+  `skip_initramfs`, which modern Magisk's init does not expect; the boot repack rewrites it
+  to `want_initramfs` (a 4-byte patch), so current Magisk patches and boots it cleanly.
 - **Cable-free recovery.** MediaTek's `mtk-su` kernel exploit grants temp root over
   plain wireless ADB no matter what state Magisk is in. A bad root patch is always
   fixable without a USB-A-to-A cable or BROM.
@@ -99,7 +100,7 @@ every removal is reversible with `cmd package install-existing`.
 ## Part 2: The custom kernel
 
 The stock 4.4.22 was a dead end, so this rebuilds the kernel from the vendor base and
-adds real capabilities. The shipping build is **`maic-4.4.302`** (rm9), built with
+adds real capabilities. The shipping build is **`maic-4.4.302`** (rm10), built with
 GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
 
 ### What we built and how it went
@@ -114,7 +115,7 @@ GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
   options and keeps everything else.
 - **Then the good builds.** rm7 added hardware crypto and the USB security fixes, and
   rm8 added in-kernel WireGuard. Each was flashed supervised with the rescue armed.
-- **rm9 (current): memory and polish.** Added `KSM` (kernel samepage merging) to dedup
+- **rm9: memory and polish.** Added `KSM` (kernel samepage merging) to dedup
   RAM across the Docker containers and app set on this 2 GB device, plus A35
   instruction-scheduling tuning. It also carries a set of log-and-driver clean-ups found
   by auditing the boot log: guarding the camera driver's vestigial GPIO requests (which
@@ -122,6 +123,14 @@ GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
   that was flooding and evicting the kernel ring buffer, and splitting a DPI pin out of a
   drive-strength group so the panel pinctrl applies cleanly instead of failing and
   reverting.
+- **rm10 (current): a security refresh.** Backported five upstream CVE fixes, each
+  hand-verified against this 4.4 tree: HID `s32ton` hardening (CVE-2025-38556), an ipv4
+  source-route capability check (CVE-2026-53249), a `zap_other_threads` signal fix
+  (CVE-2026-53352), ext4 extent-index bounds validation (CVE-2026-31449), and a conntrack
+  invalid-RST fix (CVE-2026-63913). Two of the five applied cleanly, three were adapted by
+  hand where the vendor tree had diverged, and a sixth candidate (a fcntl fasync locking
+  swap) was left out on purpose because the vendor signal path was too different to port
+  safely. exFAT was already on the modern in-tree driver, so it needed nothing.
 
 ```mermaid
 flowchart LR
@@ -129,7 +138,8 @@ flowchart LR
     rm4 -.->|hardening attempt| rm56["rm5 / rm6: DEBUG_RODATA + SW PAN"]
     rm56 -->|"did not boot"| rescue["auto-rescue restored stock"]
     rm7 --> rm8["rm8: + WireGuard"]
-    rm8 --> rm9["rm9 (shipping): + KSM, A35 tune, log/driver fixes"]
+    rm8 --> rm9["rm9: + KSM, A35 tune, log/driver fixes"]
+    rm9 --> rm10["rm10 (shipping): + 2025-2026 CVE backports"]
 ```
 
 ### Kernel features
@@ -141,7 +151,7 @@ flowchart LR
 | CPU | Interactive governor, overclock **598 to 1500 MHz**, and a thermal throttle that actually lowers the frequency (validated over a 4-day soak, 85 C peak) |
 | Crypto | ARMv8 Crypto Extensions (AES, GHASH/PMULL, SHA-1, SHA-2) for hardware dm-crypt, TLS and WireGuard |
 | VPN | **WireGuard** in-kernel, backported via `wireguard-linux-compat` |
-| Security | The 2024 USB exploit-chain fixes CVE-2024-53104 (uvcvideo), CVE-2024-50302 (HID) and CVE-2024-53197 (usb-audio), plus stack protector and `dmesg_restrict` |
+| Security | 2024 USB exploit-chain fixes (CVE-2024-53104 uvcvideo, CVE-2024-50302 HID, CVE-2024-53197 usb-audio) and a 2025-2026 CVE backport set (CVE-2025-38556 HID `s32ton`, CVE-2026-53249 ipv4 source-route, CVE-2026-53352 signal, CVE-2026-31449 ext4 extents, CVE-2026-63913 conntrack), plus stack protector and `dmesg_restrict` |
 | Filesystems | exFAT, NTFS, ext4, f2fs, vfat and iso9660 built in |
 | Network | `fq_codel` as the default qdisc (bufferbloat) |
 | Container | overlayfs and full cgroup and namespace support for Docker |
