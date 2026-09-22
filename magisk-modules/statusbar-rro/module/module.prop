@@ -1,0 +1,6 @@
+id=maic_statusbar_rro
+name=MAIC Status Bar Height (RRO)
+version=v1
+versionCode=1
+author=milouk
+description=RRO overlay: framework android:status_bar_height -> 24dp. Best-practice replacement for the framework-res.apk patch; mount-safe under Magisk 30.

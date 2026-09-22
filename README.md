@@ -79,9 +79,12 @@ every removal is reversible with `cmd package install-existing`.
 
 ### UI fixes
 
-- **Status bar restored.** MLS had set `status_bar_height` to `0dp` in
-  `framework-res.apk`, so SystemUI drew a zero-height bar. It is patched to `24dp` and
-  re-signed with the AOSP platform key, so the clock, icons and pull-down shade work.
+- **Status bar restored.** MLS had zeroed `status_bar_height` (`0dp`) in the framework, so
+  SystemUI drew a zero-height bar. Rather than re-sign the whole `framework-res.apk` (which
+  boots under Magisk 25.2 but hangs under Magisk 27+, whose overlayfs magic-mount wedges the
+  zygote-mmapped framework), a **Runtime Resource Overlay** (`magisk-modules/statusbar-rro`)
+  overrides it to `24dp`: a ~3.4 KB `/vendor/overlay` APK the ROM's `idmap` pairs at boot,
+  so the clock, icons and pull-down shade work and it stays mount-safe under any Magisk.
 - **Night screen.** The always-on daydream clock kept the panel lit around the clock.
   A schedule darkens it overnight and runs a nightly `fstrim`, which reclaimed 1.14 GB
   on its first pass.
@@ -217,7 +220,9 @@ own. The rescue target is always the stock kernel.
 kernel-project/   custom-kernel build harness, patches, packaging (mkboot.py) and notes
   patches/        the kernel changes: overclock, crypto, USB CVEs, WireGuard, tuning
   build-*.sh      GCC 5.4 and GCC 4.9 dockerized builds
-scripts/          on-device boot scripts (CA store, performance, night screen)
+scripts/          on-device boot scripts (CA store, performance, eMMC I/O scheduler,
+                  power-key handler, night screen)
+magisk-modules/   Magisk modules (status-bar RRO overlay)
 tools/            ntfs-3g and mtk-su helpers built for this device
 certs/            ISRG Root X1 and X2 (Let's Encrypt) for the trust-store fix
 ```
