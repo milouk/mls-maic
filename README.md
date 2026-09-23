@@ -100,7 +100,7 @@ every removal is reversible with `cmd package install-existing`.
 ## Part 2: The custom kernel
 
 The stock 4.4.22 was a dead end, so this rebuilds the kernel from the vendor base and
-adds real capabilities. The shipping build is **`maic-4.4.302`** (rm10), built with
+adds real capabilities. The shipping build is **`maic-4.4.302-cip114`** (rm11), built with
 GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
 
 ### What we built and how it went
@@ -123,7 +123,7 @@ GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
   that was flooding and evicting the kernel ring buffer, and splitting a DPI pin out of a
   drive-strength group so the panel pinctrl applies cleanly instead of failing and
   reverting.
-- **rm10 (current): a security refresh.** Backported five upstream CVE fixes, each
+- **rm10: a security refresh.** Backported five upstream CVE fixes, each
   hand-verified against this 4.4 tree: HID `s32ton` hardening (CVE-2025-38556), an ipv4
   source-route capability check (CVE-2026-53249), a `zap_other_threads` signal fix
   (CVE-2026-53352), ext4 extent-index bounds validation (CVE-2026-31449), and a conntrack
@@ -131,6 +131,19 @@ GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
   hand where the vendor tree had diverged, and a sixth candidate (a fcntl fasync locking
   swap) was left out on purpose because the vendor signal path was too different to port
   safely. exFAT was already on the modern in-tree driver, so it needed nothing.
+- **rm11 (current): CIP stable continuation, TCP BBR, and an I/O scheduler default.**
+  Merged `linux-4.4.y-cip` (see `kernel-project/patches/backport/resolve-stage-cip114.sh`
+  and `logs/stage-cip114.md`) -- ~2700 files brought to CIP's maintained stable
+  continuation of 4.4 (upstream itself stopped at .302), covering `ext4`, `net/ipv4`,
+  `ipv6`, `netfilter`, `core`, `sched`, `mm`, `crypto` and the USB-ethernet drivers with
+  real use-after-free/out-of-bounds/leak/race fixes; two of rm10's five hand-picked
+  CVEs turned out to be exactly CIP's own fix, retired as redundant. Backported
+  **TCP BBR** (`kernel-project/patches/bbr/`) -- upstream added it in 4.9, so this is a
+  real 7-commit adaptation onto a kernel two years older than the code, not a config
+  flip. Set `deadline` as the default I/O scheduler (was `cfq`, tuned for spinning
+  disks, wrong for eMMC). Also fixed a backlight-PWM/capacitive-touch interference bug
+  (`kernel-project/patches/touch-pwm/`) traced to the panel's LED driver running
+  slightly over its own datasheet's maximum PWM frequency -- and has since the factory.
 
 ```mermaid
 flowchart LR
@@ -139,7 +152,8 @@ flowchart LR
     rm56 -->|"did not boot"| rescue["auto-rescue restored stock"]
     rm7 --> rm8["rm8: + WireGuard"]
     rm8 --> rm9["rm9: + KSM, A35 tune, log/driver fixes"]
-    rm9 --> rm10["rm10 (shipping): + 2025-2026 CVE backports"]
+    rm9 --> rm10["rm10: + 2025-2026 CVE backports"]
+    rm10 --> rm11["rm11 (shipping): + CIP stable, TCP BBR, deadline I/O"]
 ```
 
 ### Kernel features
@@ -151,11 +165,12 @@ flowchart LR
 | CPU | Interactive governor, overclock **598 to 1500 MHz**, and a thermal throttle that actually lowers the frequency (validated over a 4-day soak, 85 C peak) |
 | Crypto | ARMv8 Crypto Extensions (AES, GHASH/PMULL, SHA-1, SHA-2) for hardware dm-crypt, TLS and WireGuard |
 | VPN | **WireGuard** in-kernel, backported via `wireguard-linux-compat` |
-| Security | 2024 USB exploit-chain fixes (CVE-2024-53104 uvcvideo, CVE-2024-50302 HID, CVE-2024-53197 usb-audio) and a 2025-2026 CVE backport set (CVE-2025-38556 HID `s32ton`, CVE-2026-53249 ipv4 source-route, CVE-2026-53352 signal, CVE-2026-31449 ext4 extents, CVE-2026-63913 conntrack), plus stack protector and `dmesg_restrict` |
+| Security | The CIP stable continuation of 4.4 (`ext4`, `net`, `mm`, `crypto`, USB-ethernet -- ~2700 files of maintained backports superseding most of the CVE list below) plus the original hand-picked set (CVE-2024-53104 uvcvideo, CVE-2024-50302 HID, CVE-2024-53197 usb-audio, CVE-2025-38556 HID `s32ton`, CVE-2026-53249 ipv4 source-route, CVE-2026-53352 signal, CVE-2026-31449 ext4 extents, CVE-2026-63913 conntrack), plus stack protector and `dmesg_restrict` |
 | Filesystems | exFAT, NTFS, ext4, f2fs, vfat and iso9660 built in |
-| Network | `fq_codel` as the default qdisc (bufferbloat) |
+| Network | **TCP BBR** congestion control + `fq` pacer (see `kernel-project/patches/bbr/`), `fq_codel` used to be the default qdisc, now `fq` for BBR |
 | Container | overlayfs and full cgroup and namespace support for Docker |
 | Memory | `KSM` samepage merging (RAM dedup across containers and apps), zram with the `lz4` compressor, and tuned `dirty_ratio`, `page-cluster` and `extra_free_kbytes` for the 2 GB target |
+| Storage | `deadline` I/O scheduler as the default (was `cfq`, tuned for rotational disks; eMMC is not one) |
 | Build | GCC 5.4 with `-mtune=cortex-a35` (in-order-pipeline scheduling for this CPU) |
 | Fixes | camera-driver GPIO `WARN` guard, charger status-line log-spam demoted, DPI panel pin-35 drive-strength split, and gslX680 touch coordinate calibration (`cal_*`) |
 
@@ -228,7 +243,8 @@ own. The rescue target is always the stock kernel.
 
 ```
 kernel-project/   custom-kernel build harness, patches, packaging (mkboot.py) and notes
-  patches/        the kernel changes: overclock, crypto, USB CVEs, WireGuard, tuning
+  patches/        the kernel changes: overclock, crypto, USB CVEs, WireGuard, tuning,
+                  CIP stable backport, TCP BBR, backlight-PWM touch fix
   build-*.sh      GCC 5.4 and GCC 4.9 dockerized builds
 scripts/          on-device boot scripts (CA store, performance, eMMC I/O scheduler,
                   power-key handler, night screen)

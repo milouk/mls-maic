@@ -33,9 +33,10 @@ set_sysctl /proc/sys/vm/extra_free_kbytes 16384
 # dmesg_restrict 0 -> 1: only root reads the kernel log (kASLR/leak hygiene).  [was 0]
 set_sysctl /proc/sys/kernel/dmesg_restrict 1
 
-# --- network (bufferbloat) ---
-# fq_codel needs CONFIG_NET_SCH_FQ_CODEL, which the current kernel lacks (only sch_htb built).
-# It is in the rm5 hardening kernel; once rm5 is flashed, uncomment to make it the default qdisc:
-grep -qw fq_codel /proc/sys/net/core/default_qdisc 2>/dev/null || set_sysctl /proc/sys/net/core/default_qdisc fq_codel  # [was pfifo_fast]
+# --- network (BBR + fq pacer, added with the CIP+BBR kernel: CONFIG_TCP_CONG_BBR +
+# CONFIG_NET_SCH_FQ are now built in, see ../bbr/). BBR needs fq specifically (not fq_codel)
+# as its pacer; fq_codel's own AQM would fight BBR's own pacing/loss model. [was pfifo_fast / cubic]
+set_sysctl /proc/sys/net/core/default_qdisc fq
+set_sysctl /proc/sys/net/ipv4/tcp_congestion_control bbr
 
 echo "$(date) applied: dirty_ratio=$(cat /proc/sys/vm/dirty_ratio) page-cluster=$(cat /proc/sys/vm/page-cluster) extra_free_kbytes=$(cat /proc/sys/vm/extra_free_kbytes) dmesg_restrict=$(cat /proc/sys/kernel/dmesg_restrict)" >> $LOG

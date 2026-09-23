@@ -1,0 +1,5 @@
+# TCP BBR -- source: kernel-project/patches/bbr/bbr.patch
+# Built in, not selected as default (fq pacing is a deliberate runtime switch -- see README.md).
+CONFIG_TCP_CONG_ADVANCED=y
+CONFIG_TCP_CONG_BBR=y
+CONFIG_NET_SCH_FQ=y
