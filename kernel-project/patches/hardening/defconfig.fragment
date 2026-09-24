@@ -1,0 +1,5 @@
+# rm13 security hardening (config-only; feature code already in-tree except the
+# SLUB __check_heap_object backport in hardened-usercopy-slub.patch)
+CONFIG_HARDENED_USERCOPY=y
+CONFIG_SCHED_STACK_END_CHECK=y
+CONFIG_DEBUG_LIST=y

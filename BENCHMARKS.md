@@ -337,6 +337,25 @@ one confirmed local hole (CVE-2020-0069) is best left unpatched because fixing i
 `mtk-su`, the cable-free root-recovery tool. CIP already covers the network/filesystem
 surface.
 
+## Security hardening (rm13) -- measured cost: zero
+
+`rm13` turns on `HARDENED_USERCOPY` + `SCHED_STACK_END_CHECK` + `DEBUG_LIST` and disables
+802.11 power-save. Enabling `HARDENED_USERCOPY` on this SLUB kernel required backporting
+`__check_heap_object()` into `mm/slub.c` (the vendor had only backported the SLAB copy),
+see `kernel-project/patches/hardening/`. Measured on-device, rm12 vs rm13:
+
+| Check | rm12 | rm13 |
+|---|---|---|
+| CPU, single-thread fixed loop | 865 cs | **865 cs** (no change) |
+| `usercopy` / `BUG` / list-corruption events (boot + docker net/disk load) | n/a | **0 / 0 / 0** |
+| Gateway ping (WiFi PS off) | -- | **2.03 / 2.77 / 3.66 ms, 0% loss, 0.48 ms jitter** |
+
+So the hardening is free in CPU terms, doesn't trip on this device's normal paths (the
+bounds-checking flavour has low false-positive risk and Android shipped it widely on
+4.4), and WiFi PS-off gives tight, stall-free latency on the always-on link. All
+features (WiFi, BT, BBR, deadline, KSM, zram, Docker, HW codec) remained functional; the
+stock rescue stayed armed throughout the supervised flash.
+
 ## Bugs found and fixed while trying to get honest numbers
 
 Three real, previously-unnoticed problems turned up purely from insisting on verifying

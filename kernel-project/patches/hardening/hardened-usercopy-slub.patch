@@ -1,0 +1,55 @@
+commit b1e5689c23494232048c17dfdd3ac9908ccb9e4b
+Author: milouk
+Date:   Thu Sep 24 10:18:44 2026 +0000
+
+    rm13: security hardening + WiFi PS-off
+    
+    - mm/slub.c: backport __check_heap_object (upstream 4.8 ed18adc1cdd0) so
+      CONFIG_HARDENED_USERCOPY links on SLUB (vendor had it for SLAB only)
+    - connsys gen2 config.h: CFG_SUPPORT_PWR_MGT 1->0 (always-on AC, drop 802.11 PS)
+    Enabled in .config: HARDENED_USERCOPY, SCHED_STACK_END_CHECK, DEBUG_LIST
+
+diff --git a/mm/slub.c b/mm/slub.c
+index 5d24aac18..86a56c2f0 100644
+--- a/mm/slub.c
++++ b/mm/slub.c
+@@ -3641,6 +3641,39 @@ size_t ksize(const void *object)
+ }
+ EXPORT_SYMBOL(ksize);
+ 
++#ifdef CONFIG_HARDENED_USERCOPY
++/*
++ * MAIC: SLUB hardened-usercopy heap object check (backported from upstream 4.8,
++ * commit ed18adc1cdd0). The vendor tree backported __check_heap_object() for SLAB
++ * only; this tree uses SLUB, so the symbol was undefined at link once
++ * CONFIG_HARDENED_USERCOPY was enabled. Rejects copies to/from userspace that do
++ * not fall entirely within a single slab object. No red_left_pad handling: that
++ * kmem_cache field does not exist on this 4.4 SLUB.
++ */
++const char *__check_heap_object(const void *ptr, unsigned long n,
++				struct page *page)
++{
++	struct kmem_cache *s;
++	unsigned long offset;
++
++	/* Find object. */
++	s = page->slab_cache;
++
++	/* Reject impossible pointers. */
++	if (ptr < page_address(page))
++		return s->name;
++
++	/* Find offset within object. */
++	offset = (ptr - page_address(page)) % s->size;
++
++	/* Allow address range falling entirely within object size. */
++	if (offset <= s->object_size && n <= s->object_size - offset)
++		return NULL;
++
++	return s->name;
++}
++#endif /* CONFIG_HARDENED_USERCOPY */
++
+ void kfree(const void *x)
+ {
+ 	struct page *page;

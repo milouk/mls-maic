@@ -100,7 +100,7 @@ every removal is reversible with `cmd package install-existing`.
 ## Part 2: The custom kernel
 
 The stock 4.4.22 was a dead end, so this rebuilds the kernel from the vendor base and
-adds real capabilities. The shipping build is **`maic-4.4.302-cip114`** (rm12), built with
+adds real capabilities. The shipping build is **`maic-4.4.302-cip114`** (rm13), built with
 GCC 5.4 and tuned for the Cortex-A35 (`-mtune=cortex-a35`).
 
 ### What we built and how it went
@@ -162,7 +162,8 @@ flowchart LR
     rm8 --> rm9["rm9: + KSM, A35 tune, log/driver fixes"]
     rm9 --> rm10["rm10: + 2025-2026 CVE backports"]
     rm10 --> rm11["rm11: + CIP stable, TCP BBR, deadline I/O"]
-    rm11 --> rm12["rm12 (shipping): overclock removed, hardware-fused"]
+    rm11 --> rm12["rm12: overclock removed, hardware-fused"]
+    rm12 --> rm13["rm13 (shipping): hardened usercopy, stack/list checks, WiFi PS off"]
 ```
 
 ### Kernel features
@@ -174,7 +175,7 @@ flowchart LR
 | CPU | Interactive governor over the stock **598 to 1300 MHz** range, and a thermal throttle that actually lowers the frequency (`kernel-project/patches/thermal/`). No overclock: the MT8167B enforces its fused 1.3 GHz CPU / 400 MHz GPU bin in hardware ([details](BENCHMARKS.md#overclocking-not-possible-on-this-chip-cpu-or-gpu)) |
 | Crypto | ARMv8 Crypto Extensions (AES, GHASH/PMULL, SHA-1, SHA-2) for hardware dm-crypt, TLS and WireGuard |
 | VPN | **WireGuard** in-kernel, backported via `wireguard-linux-compat` |
-| Security | The CIP stable continuation of 4.4 (`ext4`, `net`, `mm`, `crypto`, USB-ethernet -- ~2700 files of maintained backports superseding most of the CVE list below) plus the original hand-picked set (CVE-2024-53104 uvcvideo, CVE-2024-50302 HID, CVE-2024-53197 usb-audio, CVE-2025-38556 HID `s32ton`, CVE-2026-53249 ipv4 source-route, CVE-2026-53352 signal, CVE-2026-31449 ext4 extents, CVE-2026-63913 conntrack), plus stack protector and `dmesg_restrict` |
+| Security | The CIP stable continuation of 4.4 (`ext4`, `net`, `mm`, `crypto`, USB-ethernet -- ~2700 files of maintained backports superseding most of the CVE list below) plus the original hand-picked set (CVE-2024-53104 uvcvideo, CVE-2024-50302 HID, CVE-2024-53197 usb-audio, CVE-2025-38556 HID `s32ton`, CVE-2026-53249 ipv4 source-route, CVE-2026-53352 signal, CVE-2026-31449 ext4 extents, CVE-2026-63913 conntrack), plus stack protector, `dmesg_restrict`, and rm13 hardening (`HARDENED_USERCOPY`, `SCHED_STACK_END_CHECK`, `DEBUG_LIST`; see `kernel-project/patches/hardening/`) |
 | Filesystems | exFAT, NTFS, ext4, f2fs, vfat and iso9660 built in |
 | Network | **TCP BBR** congestion control + `fq` pacer (see `kernel-project/patches/bbr/`), `fq_codel` used to be the default qdisc, now `fq` for BBR |
 | Container | overlayfs and full cgroup and namespace support for Docker |
@@ -317,7 +318,7 @@ including the register-level proof, is in
 ```
 kernel-project/   custom-kernel build harness, patches, packaging (mkboot.py) and notes
   patches/        the kernel changes: crypto, USB CVEs, WireGuard, tuning, thermal
-                  throttle, CIP stable backport, TCP BBR, backlight-PWM touch fix
+                  throttle, CIP stable backport, TCP BBR, backlight-PWM touch fix, hardening
   build-*.sh      GCC 5.4 and GCC 4.9 dockerized builds
 scripts/          on-device boot scripts (CA store, performance, eMMC I/O scheduler,
                   power-key handler, night screen)
