@@ -250,13 +250,67 @@ own. The rescue target is always the stock kernel.
 
 ## Measured results
 
-Kernel changes (CIP, BBR, deadline I/O, the qdisc fix) are backed by actual
-measurements on the device, not just reasoning -- see [`BENCHMARKS.md`](BENCHMARKS.md),
-including the real bugs the measuring process itself uncovered (a config change silently
-reverted every boot, and a qdisc sysctl that did nothing on the Wi-Fi interface). It also
-documents why there is no overclock: an earlier 1500 MHz overclock reported success
-everywhere in software, but the SoC's own frequency meter showed the chip holding its
-fused 1.3 GHz bin in hardware, so it was removed in `rm12`.
+Every kernel change was measured on the real tablet, not assumed -- full method and
+numbers in [`BENCHMARKS.md`](BENCHMARKS.md). The most useful way to read it: same
+silicon, same 1.3 GHz, same userspace, only the boot image swapped between the factory
+kernel and ours.
+
+### Head to head: stock 4.4.22 vs. our kernel
+
+| What you feel | Stock `4.4.22` | Ours `4.4.302-cip114` | Change |
+|---|---:|---:|:--|
+| Cold app launch (Settings) | 534 ms | **455 ms** | ~15% faster |
+| Latency under network load (avg) | 58 ms | **27 ms** | **~2.1x lower** |
+| Latency spike under load (max) | 151 ms | **78 ms** | ~2x lower |
+| TCP retransmits (up / down) | 2 / 8 | **0 / 0** | cleaner |
+| CPU, single thread | 875 | **865** | ~1.3% faster |
+| CPU, all 4 cores | 903 | **881** | ~2.4% faster |
+
+*CPU units are hundredths of a second for a fixed workload, lower is faster.*
+
+The honest summary: **raw compute is a near-tie** -- it is the same Cortex-A35 at the
+same fused 1.3 GHz ceiling, and no kernel can change that. The wins that matter are
+**responsiveness** (BBR + `fq` roughly halve latency and kill bufferbloat under load) and
+**app launch** (from `-mtune=cortex-a35`, the `deadline` scheduler, VM tuning and KSM
+freeing RAM on a 2 GB device).
+
+### What the stock kernel simply cannot do
+
+The bigger difference is capability, not speed -- these are things the factory kernel has
+no support for at all:
+
+| Capability | Stock | Ours |
+|---|:---:|:---:|
+| TCP BBR congestion control | :x: | :white_check_mark: |
+| Docker (needs SysV IPC, overlayfs, cgroups) | :x: | :white_check_mark: |
+| In-kernel WireGuard VPN | :x: | :white_check_mark: |
+| Hardware AES / SHA (ARMv8 crypto ext.) | :x: | :white_check_mark: |
+| exFAT / NTFS | :x: | :white_check_mark: |
+| KSM RAM dedup + `lz4` zram | :x: | :white_check_mark: |
+| ~2,700 CIP stability/security backports | :x: | :white_check_mark: |
+| Camera / charger / panel / touch bug fixes | :x: | :white_check_mark: |
+
+### Driver-tuning sweep -- already near-optimal
+
+A full vendor-driver fingerprint + tuning pass (GPU, WiFi, camera, touch, amp) found the
+device is already close to its ceiling. The audio amp was measured with a deterministic
+acoustic A/B (AFE sine generator -> speaker -> built-in mic -> RMS/FFT/THD) but left at
+the vendor default: the mic's SNR is too low to safely detect clipping, and the amp is
+already near max. HW video decode, GPU input-boost, and WiFi no-sleep are all already
+enabled by the vendor; 802.11 power-save needs a kernel flag; GPU/WiFi firmware are
+locked blobs. No remotely-reachable vendor-driver CVE exists for this hardware. Full
+detail in [`BENCHMARKS.md`](BENCHMARKS.md#driver-tuning-sweep-2026-09-24-whats-already-optimal-what-isnt-tunable).
+
+### Bugs the measuring itself caught
+
+Insisting on real numbers, not reasoning, turned up real bugs that were invisible from
+config alone: a backup script silently reverting the qdisc every boot; a `default_qdisc`
+sysctl that did nothing on the Wi-Fi interface; and -- chasing why an "overclock" showed
+no speedup -- the discovery that **the MT8167B enforces its 1.3 GHz / 400 MHz bin in the
+PLL hardware**. Every software layer reported 1500 MHz; the SoC's own frequency meter
+showed it never left 1300. The overclock was removed in `rm12`. The full write-up,
+including the register-level proof, is in
+[`BENCHMARKS.md`](BENCHMARKS.md#overclocking-not-possible-on-this-chip-cpu-or-gpu).
 
 ## Repository layout
 

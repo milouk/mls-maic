@@ -273,6 +273,70 @@ available, and installing them via a container would test userspace's own ARMv8 
 crypto routines, a separate code path from the kernel driver this config actually
 gates. Presence confirmed; throughput not independently measured this session.
 
+## Driver-tuning sweep (2026-09-24): what's already optimal, what isn't tunable
+
+After fingerprinting every vendor driver (GPU PowerVR GE8300 DDK 1.8, WiFi MT6625L
+connsys gen2 `11_70_00_20161025_1`, camera GC5024, touch gslX680, amp ad82584f) and
+searching for updates/optimizations/hacks, the honest headline is: **the device is
+already near-optimally tuned**, and most remaining levers are either vendor-enabled,
+hardware-fused, or behind a closed ABI. Details:
+
+### Audio amp (ad82584f) -- measured, left at vendor default
+
+The one lever with real day-to-day upside is the class-D amp. To decide *safely* whether
+there was clean headroom to raise output, the amp was measured with a deterministic
+acoustic A/B: inject a fixed tone at the speaker DAC via the AFE sine generator
+(`Audio_SideGen_Switch = AFE_SGEN_O3O4`), capture it with the built-in mic (`tinycap`
+on `MultiMedia1_Capture`), and analyze RMS / FFT / THD on a host.
+
+| Amp channel volume | mic RMS | THD (acoustic) |
+|---|---|---|
+| 231 (vendor default) | -54.4 dBFS | ~13% |
+| 246 (raised) | -53.9 dBFS | ~3.9% |
+
+The method is deterministic and repeatable, **but the built-in mic captures the speaker
+at only ~-54 dBFS**, so the A/B deltas (+0.5 dB RMS; the THD numbers) are within
+measurement noise -- not precise enough to reliably detect clipping onset. Since the amp
+is already at near-maximum (Master 246/255, Speaker PGA +14 dB) and raising gain without
+trustworthy distortion measurement risks shipping audible clipping, **the amp was left at
+the vendor default.** A calibrated result would need an external mic/line capture, which
+isn't available remotely. Conclusion: measurable in method, not safely improvable with
+on-device instrumentation, and already well set by the vendor.
+
+### Already optimal (verified live) -- no change needed
+
+- **HW video decode is engaged**: `MtkCodecService` + `mediacodec` services running; the
+  H.264/HEVC 1080p30 decode path is active, not falling back to software.
+- **GPU input-boost is already enabled** (`/proc/gpufreq/gpufreq_input_boost`), and the
+  GPU is capped at its fused 403 MHz OPP -- pinning it would only defeat DVFS/thermal for
+  no gain. GPU 494 MHz is fused off in hardware (same as the CPU overclock).
+- **WiFi doesn't sleep**: Android `wifi_sleep_policy = 2` (never) is already set.
+- **WiFi aggregation/SGI/QoS** (`CFG_SUPPORT_AMPDU_TX/RX`, `RX_SGI`, `QOS`) are already
+  `=1` in the driver config.
+
+### Not tunable without a kernel rebuild or new hardware
+
+- **802.11 power-save** has no clean runtime knob on connsys gen2; disabling it (a small
+  latency win on an always-on device) needs the `CFG_SUPPORT_PWR_MGT` compile flag -- a
+  candidate for a future kernel, not a runtime change.
+- **Touch** report-rate/sensitivity is firmware-burned in the gslX680 config array; only
+  the coordinate calibration (`cal_*`) is tunable, and that's already done.
+- **GPU driver / WiFi firmware** can't be updated: the PowerVR blob is BVNC-locked to
+  22.40.54.30, and `WIFI_RAM_CODE_8167` is a frozen 2016 device blob. Community WiFi
+  forks are the same driver repackaged.
+
+### Vendor-driver CVEs -- fingerprinted, nothing worth backporting
+
+Every vendor-driver CVE that maps to this device (PowerVR `pvrsrvkm` 2021 series, connsys
+gen2 June-2018 cluster, MTK camera/cmdq) is **local privilege-escalation requiring a
+malicious app already installed** -- and the WLAN `gl_proc.c` bounds fix is already
+present in-tree. No *remotely* reachable vendor-driver bug exists for this hardware (the
+scary MediaTek WiFi RCEs are all AP/router mt76 chipsets, not our MT6625L client). For a
+curated, GMS-free appliance behind home NAT, that attack surface is near-zero, and the
+one confirmed local hole (CVE-2020-0069) is best left unpatched because fixing it breaks
+`mtk-su`, the cable-free root-recovery tool. CIP already covers the network/filesystem
+surface.
+
 ## Bugs found and fixed while trying to get honest numbers
 
 Three real, previously-unnoticed problems turned up purely from insisting on verifying
