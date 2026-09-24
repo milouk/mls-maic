@@ -281,7 +281,7 @@ searching for updates/optimizations/hacks, the honest headline is: **the device 
 already near-optimally tuned**, and most remaining levers are either vendor-enabled,
 hardware-fused, or behind a closed ABI. Details:
 
-### Audio amp (ad82584f) -- measured, left at vendor default
+### Audio amp (ad82584f) -- measured, then tuned by ear (+7 dB, kept)
 
 The one lever with real day-to-day upside is the class-D amp. To decide *safely* whether
 there was clean headroom to raise output, the amp was measured with a deterministic
@@ -295,13 +295,15 @@ on `MultiMedia1_Capture`), and analyze RMS / FFT / THD on a host.
 | 246 (raised) | -53.9 dBFS | ~3.9% |
 
 The method is deterministic and repeatable, **but the built-in mic captures the speaker
-at only ~-54 dBFS**, so the A/B deltas (+0.5 dB RMS; the THD numbers) are within
-measurement noise -- not precise enough to reliably detect clipping onset. Since the amp
-is already at near-maximum (Master 246/255, Speaker PGA +14 dB) and raising gain without
-trustworthy distortion measurement risks shipping audible clipping, **the amp was left at
-the vendor default.** A calibrated result would need an external mic/line capture, which
-isn't available remotely. Conclusion: measurable in method, not safely improvable with
-on-device instrumentation, and already well set by the vendor.
+at only ~-54 dBFS**, so the acoustic A/B deltas are within measurement noise -- not
+precise enough to reliably detect clipping onset. So the final call was made **by ear**
+with a live A/B toggle. Only the ad82584f **channel volume** persists during playback
+(the codec PGA / Int-Spk controls are HAL-managed and reset on stream start), so that was
+the lever. Stepping channels 231 -> 246 -> 255 on real music, the owner judged **246
+"noticeably louder and still clear enough"** and 255 the ceiling. **246 was kept**, matched
+to Master 246, and persisted via `scripts/service.d_amp.sh` (re-applied after boot to
+survive the audio HAL coming up). Net: ~+7 dB of clean speaker headroom over the vendor
+default, no tonal/EQ change (the ad82584f's internal EQ has no public register map).
 
 ### Already optimal (verified live) -- no change needed
 

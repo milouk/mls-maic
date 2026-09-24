@@ -171,7 +171,7 @@ flowchart LR
 | Area | Feature |
 |---|---|
 | Camera | GC5024 MIPI settle fix (`14` to `85`) plus horizontal mirror, so the front camera captures |
-| Audio | Emdoor Synaptics DSP (CX2092x), AFE external amp and I2S, plus an AFE SRAM `memset_io` fix |
+| Audio | Emdoor Synaptics DSP (CX2092x), AFE external amp and I2S, plus an AFE SRAM `memset_io` fix; ad82584f speaker level tuned +7 dB by ear (`scripts/service.d_amp.sh`) |
 | CPU | Interactive governor over the stock **598 to 1300 MHz** range, and a thermal throttle that actually lowers the frequency (`kernel-project/patches/thermal/`). No overclock: the MT8167B enforces its fused 1.3 GHz CPU / 400 MHz GPU bin in hardware ([details](BENCHMARKS.md#overclocking-not-possible-on-this-chip-cpu-or-gpu)) |
 | Crypto | ARMv8 Crypto Extensions (AES, GHASH/PMULL, SHA-1, SHA-2) for hardware dm-crypt, TLS and WireGuard |
 | VPN | **WireGuard** in-kernel, backported via `wireguard-linux-compat` |
