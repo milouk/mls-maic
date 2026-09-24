@@ -156,7 +156,7 @@ Why freestanding C and not a script? Stock recovery has no shell, and Magisk's 1
 With a working rescue I stopped being scared of the boot partition, and that is the whole trick. The shipping kernel (`maic-4.4.302`) gained:
 
 - **Camera capture**, from the GC5024 settle fix above.
-- **An overclock** that lifts the top operating point from the stock 1.3 GHz to 1.5 GHz, with the interactive governor ranging 598 to 1500 MHz and a thermal throttle that actually lowers the frequency. The vendor code only cut core count, a no-op with hotplug off. Validated over a four-day soak, 85 C peak, zero mismatches.
+- **A thermal throttle that actually lowers the frequency.** The vendor code only cut the core count, a no-op with hotplug off. (An overclock was tried too, but this MT8167B enforces its fused 1.3 GHz bin in hardware, so it was dropped.)
 - **Hardware crypto**, because the A35 does carry the ARMv8 extensions (`aes pmull sha1 sha2` in `/proc/cpuinfo`), so enabling the CE drivers was a real config-only win.
 - **The 2024 USB exploit-chain CVE fixes**, CVE-2024-53104, 50302 and 53197, backported and source-gated.
 - **WireGuard, in-kernel.** The backport is clean. You drop the compat source into the tree and wire it up:

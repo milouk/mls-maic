@@ -69,6 +69,23 @@ sysctl -w net.ipv4.tcp_congestion_control=bbr
 See `../tuning/maic_sysctl.sh` for the persisted version of this (a Magisk
 `service.d` script, applied after `boot_completed`).
 
+## The qdisc trap: `default_qdisc=fq` alone does nothing on WiFi
+
+Setting the sysctl is not sufficient. `net.core.default_qdisc` only governs qdiscs
+created *fresh* for an interface -- it does not retroactively change one a driver
+already configured. Android's WiFi stack brings `wlan0` up with `mq` (multi-queue) at
+the root and `pfifo_fast` on each hardware TX queue, **regardless of the sysctl
+default**, before any post-boot script runs. Verified live: with the sysctl already set
+to `fq`, `tc qdisc show dev wlan0` still showed `mq`/`pfifo_fast`.
+
+`maic_qdisc_wlan0.sh` fixes this by explicitly forcing it after boot with
+`tc qdisc replace dev wlan0 root fq` (Android's `tc` prints "Android does not support
+qdisc 'fq'" -- ignore it, the replace succeeds anyway; verify with `tc qdisc show`, not
+the exit message). Measured impact on top of BBR, otherwise identical conditions: +25%
+throughput, retransmits 1 -> 0, latency-under-load roughly halved again. See
+`../../BENCHMARKS.md` for the full numbers -- this is not a minor detail, it's the
+difference between BBR actually getting paced and running unpaced.
+
 ## Verifying it actually links, not just compiles
 
 `grep`-ing for symbol name strings in a raw/gzip-decompressed `Image` is not reliable

@@ -1,0 +1,44 @@
+diff --git a/drivers/misc/mediatek/base/power/mt8167/mtk_power_throttle.c b/drivers/misc/mediatek/base/power/mt8167/mtk_power_throttle.c
+index 3f25729d2..6f36e9bde 100644
+--- a/drivers/misc/mediatek/base/power/mt8167/mtk_power_throttle.c
++++ b/drivers/misc/mediatek/base/power/mt8167/mtk_power_throttle.c
+@@ -280,7 +280,16 @@ static int mtk_cpufreq_thermal_notifier(struct notifier_block *nb,
+ 	 * Only DVFS TLP feature enable, we can keep the max freq by CPUFREQ
+ 	 * GOVERNOR or Pref service.
+ 	 */
+-	if ((policy->max != clipped_freq) && (clipped_freq >= policy->min)) {
++	/*
++	 * MAIC: the vendor condition refuses every thermal clip below policy->min, so
++	 * a raised floor (scaling_min_freq = 1300000, or the 1300000/1196000 floors
++	 * PerfService writes during boosts) leaves thermal without its frequency
++	 * lever. Let the clip win over the floor; the floor returns by itself when
++	 * the limit is released, because cpufreq_update_policy() rebuilds the policy
++	 * from user_policy. clipped_freq == 0 means no limit has been computed yet:
++	 * never clip to 0.
++	 */
++	if (clipped_freq && (policy->max != clipped_freq || policy->min > clipped_freq)) {
+ 		ret = is_ptp_initialized_done();
+ 		if (ret) {
+ 			pr_err("PTP is initializing. Cannot do thermal throttling, ret = %d\n", ret);
+@@ -342,8 +351,19 @@ void mt_cpufreq_thermal_protect(unsigned int limited_power)
+ 	} else {
+ 		for (ncpu = possible_cpu; ncpu > 0; ncpu--) {
+ 			for (i = 0; i < p->nr_opp_tbl * possible_cpu; i++) {
+-				/* p->power_tbl[i].cpufreq_ncpu == ncpu && */
+-				if (p->power_tbl[i].cpufreq_power <= limited_power) {
++				/*
++				 * MAIC: match the core count (and skip the unused zero OPP
++				 * slots). The vendor tree commented the match out, which turns
++				 * the search into "first entry under budget" in a table sorted
++				 * by power -- few cores at a high frequency. At the 300 mW ATM
++				 * floor that resolved to 1 core at the top OPP; with MTK
++				 * hotplug off (perf.sh) the core limit is a no-op, so the
++				 * frequency never dropped and the SoC ran past 80 C.
++				 * Prefer keeping the cores and lowering the frequency.
++				 */
++				if (p->power_tbl[i].cpufreq_khz &&
++				    p->power_tbl[i].cpufreq_ncpu == ncpu &&
++				    p->power_tbl[i].cpufreq_power <= limited_power) {
+ 					limited_max_ncpu = p->power_tbl[i].cpufreq_ncpu;
+ 					limited_max_freq = p->power_tbl[i].cpufreq_khz;
+ 					found = 1;

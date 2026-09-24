@@ -85,7 +85,7 @@ jobs:
 
             **Features:** in-kernel WireGuard · ARMv8 crypto extensions · 2024 USB +
             2025-2026 CVE backports (HID, ipv4 source-route, signal, ext4, conntrack) ·
-            overclock 598-1500 MHz + thermal throttle · fq_codel · zram · KSM ·
+            thermal throttle · fq_codel · zram · KSM ·
             exFAT/NTFS/ext4/f2fs · Docker (overlayfs/cgroups/namespaces) · camera GPIO,
             charger-log-spam and panel pin-35 fixes.
 

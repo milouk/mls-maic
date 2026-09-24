@@ -1,9 +1,0 @@
-# Derived from clk_summary.txt (same directory), read-only, our kernel.
-clk26m -> mainpll -> mainpll_d8 -> msdc0_sel -> msdc0 -> msdc0_infra   (eMMC, 187.6875 MHz)
-clk26m -> mainpll -> mainpll_d8 -> msdc1_sel -> msdc1 -> msdc1_infra   (SD,   187.6875 MHz)
-clk26m -> univpll -> univpll_d6 -> msdc2_sel -> rg_msdc2 -> msdc2_infra (208 MHz)
-clk26m -> mmpll   -> mmpll380m  -> csw_mux_mfg_sel -> mfg_mm_sel -> mfg_mm -> mfg_bg3d  (GPU only)
-clk26m -> mmpll   -> mmpll_d2 / mmpll_200m  (no children = no consumers)
-# Source check: drivers/mmc/host/mtk-sd.c has no clk_set_parent/clk_set_rate, so msdc muxes keep
-# their bootloader-selected parents at runtime. MMPLL feeds only the GPU.
-# => GPU OC is NOT blocked by the eMMC/SD clock path.
